@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.19;
+
+interface INFT {
+    function ownerOf(uint256 tokenId) external view returns (address);
+    function getNfts(uint256 tokenid) external view returns (uint256, uint256, address, bytes memory);
+}
+
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+}
+
+abstract contract Ownable is Context {
+    address private _owner;
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    constructor() {
+        _transferOwnership(_msgSender());
+    }
+
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    modifier onlyOwner() {
+        require(owner() == _msgSender(), "caller is not the owner");
+        _;
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "new owner is the zero address");
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+contract BlueWolfDragonPool is Ownable {
+
+    event latestAction(address indexed cardContract, address indexed cardOwner, uint256 tokenid, uint256 timestamp, uint256 damaged);
+
+    uint256 constant dept = 86400 * 3;
+
+    address[] public attacker;
+    uint256[] public damage;
+
+    uint256 public maxHitpoint;
+    uint256 public totalPoolDamage;
+
+    mapping (address => uint256) public accountIndex;
+    mapping (address => mapping (uint256 => uint256)) public cooldown;
+
+    constructor(){
+        maxHitpoint = 21000000;
+        attacker.push(address(0));
+        damage.push(0);
+    }
+
+    function getAttackers() public view returns (address[] memory, uint256[] memory) {
+        return (attacker, damage);
+    }
+
+    function NFTCooldown(address Nfts, uint256 tokenid) public view returns (uint256) {
+        if(cooldown[Nfts][tokenid] + dept > block.timestamp){
+            return cooldown[Nfts][tokenid] + dept - block.timestamp;
+        }
+        return 0;
+    }
+
+    function readvalue(address Nfts, uint256 tokenid, uint256 mod) public view returns (uint256) {
+        (uint256 id, uint256 birth, address minter,) = INFT(Nfts).getNfts(tokenid);
+        uint256 ran = uint(keccak256(abi.encodePacked(id, birth, minter))) % mod;
+        return ran;
+    }
+
+    function makeAttackTransaction(address Nfts, uint256 tokenid) public payable returns (bool) {
+        INFT nft = INFT(Nfts);
+        address ownerNft = nft.ownerOf(tokenid);
+        require(ownerNft==_msgSender(), "This NFTs Token ID Is Not Your Owned");
+        require(NFTCooldown(Nfts, tokenid)==0, "This NFTs Token ID Is In Cooldown");
+        require(totalPoolDamage<maxHitpoint, "This Pool Is Dead");
+        cooldown[Nfts][tokenid] = block.timestamp;
+        uint256 damaged = readvalue(Nfts, tokenid, 10000);
+        totalPoolDamage += damaged;
+        if (accountIndex[ownerNft]==0) {
+            accountIndex[ownerNft] = attacker.length;
+            attacker.push(ownerNft);
+            damage.push(damaged);
+        } else {
+            damage[accountIndex[ownerNft]] += damaged;
+        }
+        emit latestAction(Nfts, _msgSender(), tokenid, block.timestamp, damaged);
+        return true;
+    }
+
+    function executeFunctionFromOwner(address to, uint256 weth, bytes memory data) public onlyOwner returns (bool) {
+        if(weth>0){
+            (bool success,) = to.call{ value: weth }(data);
+            require(success);
+        }else{
+            (bool success,) = to.call(data);
+            require(success);
+        }
+        return true;
+    }
+}

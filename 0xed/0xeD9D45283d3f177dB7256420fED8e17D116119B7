@@ -1,0 +1,589 @@
+
+// File: TuTeng/BNS/dapp3.sol
+            // SPDX-License-Identifier: MIT
+            pragma solidity >=0.7.0 <0.9.0;
+
+            interface IERC20 {
+                function totalSupply() external view returns (uint256);
+                function balanceOf(address account) external view returns (uint256);
+                function transfer(address recipient, uint256 amount) external returns (bool);
+                function allowance(address owner, address spender) external view returns (uint256);
+                function approve(address spender, uint256 amount) external returns (bool);
+                function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+                event Transfer(address indexed from, address indexed to, uint256 value);
+                event Approval(address indexed owner, address indexed spender, uint256 value);
+            }
+
+
+            contract Dapp {
+                struct User{
+                    uint256 index;
+                    uint256 amount;
+                    uint256 time;
+                }
+
+                mapping(address=>mapping(uint256=>User))public userVotingList;
+
+                struct NodeInfo{
+                    uint256 nodeindex;
+                    address nodeAddress;
+                    uint256 index;
+                    bool isopen;
+                    uint256 votingAmount;
+                    uint256 stakeAmount;
+                    uint256 time;
+                }
+
+
+                IERC20 public BNSToken;
+                
+               
+
+                
+                uint256 public staketime=72 hours;
+
+                uint256 public alreadyNum;
+                //uint256 public staketime=10 minutes;
+
+                uint256 public EquallySharedMiningPool=3500e18;
+                uint256 public PowerNodeMiningPool=3500e18;
+                uint256 public VotingPool=3000e18;
+
+                uint256 public EquallySharedMiningPoolNum;
+                uint256 public PowerNodeMiningPoolNum;
+                uint256 public VotingPoolNum;
+
+                uint256 public totalStakeNum;
+                address public owner;
+                address public fun;
+                uint256 public bigNodeNum;
+                uint256 public smallNodeNum;
+                uint256 public totalMintNum;
+                address[]public votingAddrs;
+
+                mapping(address=>mapping(uint256=>uint256))public nodeRewardShare;
+              
+                mapping(address=>uint256)public userVoteNum;
+               
+                mapping(address=>mapping(uint256=>uint256))public EquallySharedMiningPoolnodeRewardShare;
+                mapping(address=>mapping(uint256=>uint256))public PowerNodeMiningPoolnodeRewardShare;
+
+                mapping(address=>uint256[])public userVoting;
+
+                mapping(uint256=>address[])public nodeVoting;
+
+              
+
+                mapping(address=>mapping(uint256=>uint256))public canwakuang1;
+                mapping(address=>mapping(uint256=>uint256))public canwakuang2;
+                mapping(address=>uint256)public canwakuang3;
+
+                
+                
+                NodeInfo[] public nodeList;
+
+                address[]public shequAddrs;
+
+                uint256 public bigNum=50000e18;
+
+                uint256 public smallNum=10000e18;
+
+                uint256 public totalVotingAmount;
+
+                event DepostEvent(address indexed user,uint256 indexed amount);
+                event WithDrawEvent(address indexed user,uint256 indexed amount1,uint256 amount2);
+                event VoteEvent(address indexed user,uint256 indexed amount,uint256 index);
+                event UnStakeEvent(address indexed user,uint256 indexed amount,uint256 time);
+                event WithDrawStakeEvent(address indexed user,uint256 indexed amount,uint256 time);
+                event TiquEvent(address indexed user,uint256 indexed amount,uint256 time);
+
+
+                modifier onlyOwner() {
+
+                    require(msg.sender == owner);
+
+                    _;
+              }
+
+                constructor(address _bnsToken,address _fun){
+                    BNSToken=IERC20(_bnsToken);
+                    fun=_fun;
+                    owner=msg.sender;
+                }
+
+                function transferOwnership(address newOwner) public onlyOwner {
+                    require(newOwner != address(0));
+                    owner = newOwner;
+              }
+
+                function  setStakeNum(uint256 _bigNum,uint _smallNum)external onlyOwner{
+                    bigNum=_bigNum;
+                    smallNum=_smallNum;
+                }
+
+                
+
+                function setDeposit(address[]memory addr,uint256[] memory nums,uint256[]memory nodeindexs,uint256[]memory indexs)external onlyOwner{
+                    for(uint256 i=0;i<addr.length;i++){
+                        nodeList.push(NodeInfo({
+                        nodeindex: nodeindexs[i],
+                        nodeAddress: addr[i],
+                        index: indexs[i],
+                        isopen: true,
+                        votingAmount: 0,
+                        stakeAmount: nums[i],
+                        time: block.timestamp
+                    }));
+                    totalStakeNum+=nums[i];
+                    shequAddrs.push(addr[i]);
+                    }
+                }
+                //["0xd4E94B2E2f91e3103B5A93cF0E4C4F4d7e2D4cD1","0xD34cc72480DB4DDEF4f9BF49E1E55554CE5826FF","0xE14ba12d83fB7762E266435477b99a4bA54F86c9","0xE14ba12d83fB7762E266435477b99a4bA54F86c9","0x8dDF5E4c042E108B618C7b9916D114b65d012515","0xa2A5e55b2940B8bFde2661B61DB46D8762F25E89","0x22598ae70DCF4a98F01B4fAB5E66bBb929C352ed","0x0aCa4922C58E14181Af9Eb6a82B4DA8FDB4c1989","0x05b565B9773f2284e45d6734eCA2345928A6b5C7","0xbAF5Aa0e3412733326EBA3D22594eF52Dd901C03","0x0F7EeBDaEE70EB04ce8DF16ceb8A33967411038E","0x6dcAe9ecAB6f78C28604324D286a10EEFBCAb9ea","0xbb55b502Ea83C3691fdC7FdB30f08A01232E4C33","0x1E1e27442CF15A652C4FC6c450B40fAD3F1aE802","0x9D080DE3f85b61d60AB5468122077a414bc20529","0x41417aD74b3ddc03c8f53693F825F1D6103AD2c2","0x3305Ac111e027abC8A2f738d8De250D01BB3Aef3","0x490DeEd91d0C2ff89ED0b035F93db196D5c1DC54","0x51c4C4f8Ef019ED3B2ef141E2Ef15D0aA1708E86","0x1F3f848083396Fb5FB43590C519B77D6Db0a6Fe8","0x48C490a85904E5938869090810AFe6e016D0903f","0x90fb484B7d46b5d245Fc5093090536aAb266BfF2","0x5620E2f11b2e05ef3B2917183F35FC8FA9ea9138"]
+                //[50000000000000000000000,50000000000000000000000,50000000000000000000000,50000000000000000000000,50000000000000000000000,50000000000000000000000,50000000000000000000000,50000000000000000000000,50000000000000000000000,50000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000,10000000000000000000000]               
+                //[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]
+                //[0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1]
+
+                function deposit(address user,uint256 num)external onlyOwner{
+                    require(num==bigNum||num==smallNum,"num not allowed");
+                    require(BNSToken.transferFrom(msg.sender, address(this), num),"transfer bns fail");
+                    totalStakeNum+=num;
+                    uint256 _index;
+                    if(num==bigNum){
+                        bigNodeNum++;
+                        _index=0;
+                    }else{
+                        smallNodeNum++;
+                        _index=1;
+                    }
+
+                    nodeList.push(NodeInfo({
+                        nodeindex:nodeList.length,
+                        nodeAddress:user,
+                        index:_index,
+                        isopen:false,
+                        votingAmount:0,
+                        stakeAmount:num,
+                        time:block.timestamp
+                    }));
+                    shequAddrs.push(user);
+
+                    //indextoaddrss[nodeList.length]=user;
+
+                    emit DepostEvent(user, num);
+                }
+
+                function withDrawStake(uint256 nodeIndex)external onlyOwner{
+                    uint256 amount=nodeList[nodeIndex].stakeAmount;
+                    nodeList[nodeIndex].stakeAmount=0;
+                    BNSToken.transfer(fun, amount);
+                    emit WithDrawStakeEvent(msg.sender,amount,block.timestamp);
+                }
+
+                function tiqu(uint256 amount)external  onlyOwner{
+                    require(amount<=BNSToken.balanceOf(address(this)),"amount>leavetoken");
+                    BNSToken.transfer(fun, amount);
+                    emit TiquEvent(fun,amount,block.timestamp);
+                }
+                
+
+                function equallySharedMiningPool(uint256 nodeindex) external {
+                   require(block.timestamp >= canwakuang1[msg.sender][nodeindex] + 24 hours, "not wa kuang");
+                   canwakuang1[msg.sender][nodeindex]=block.timestamp;
+
+                   if (totalMintNum >= 1000000e18 && totalMintNum < 2000000e18 && alreadyNum == 0) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 1;
+                    } else if (totalMintNum >= 2000000e18 && totalMintNum < 3000000e18 && alreadyNum == 1) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 2;
+                    } else if (totalMintNum >= 3000000e18 && totalMintNum < 4000000e18 && alreadyNum == 2) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 3;
+                    } else if (totalMintNum >= 4000000e18 && alreadyNum == 3) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 4;
+                    }
+                    if ((nodeList[nodeindex].index==0&&nodeList[nodeindex].votingAmount>=10000e18)||(nodeList[nodeindex].index==1&&nodeList[nodeindex].votingAmount>=3000e18)) {
+                        uint256 _totalStake;
+                   
+                        for(uint256 i=0;i<nodeList.length;i++){
+                            if (nodeList[i].index==0&&nodeList[i].votingAmount>=10000e18||nodeList[i].index==1&&nodeList[i].votingAmount>=3000e18) {
+                                _totalStake+=nodeList[i].stakeAmount;
+                            }
+                            
+                        }
+
+                            uint256 stakeAmount = nodeList[nodeindex].stakeAmount;
+                            uint256 rewardShare = (stakeAmount * EquallySharedMiningPool) / _totalStake;
+                            nodeRewardShare[nodeList[nodeindex].nodeAddress][nodeList[nodeindex].nodeindex]+=rewardShare;
+                            EquallySharedMiningPoolnodeRewardShare[nodeList[nodeindex].nodeAddress][nodeList[nodeindex].nodeindex]+=rewardShare;
+                            totalMintNum+=rewardShare;
+                            EquallySharedMiningPoolNum+=rewardShare;
+                    }
+                     
+            }
+
+
+            function isIndexInVotingAmounts(uint256[] memory topIndices,uint256 index) internal  view returns (bool) {
+                // 确保索引在有效范围内
+                if (index >= nodeList.length) {
+                    return false;
+                }
+
+                // 遍历 nodeList 中的元素
+                for (uint256 i = 0; i < topIndices.length; i++) {
+                    if (topIndices[i]== index) {
+                        return true; // 找到匹配的索引
+                    }
+                }
+
+                return false; // 没有找到匹配的索引
+            }
+
+            function getTopVotingAmounts() internal  view returns (uint256[] memory) {
+                uint256[] memory indices = new uint256[](nodeList.length);
+                
+                // 填充 indices 数组
+                for (uint256 i = 0; i < nodeList.length; i++) {
+                    indices[i] = i;
+                }
+
+                // 按 votingAmount 对 indices 进行排序
+                for (uint256 i = 0; i < indices.length; i++) {
+                    for (uint256 j = i + 1; j < indices.length; j++) {
+                        if (nodeList[indices[i]].votingAmount < nodeList[indices[j]].votingAmount) {
+                            // 交换
+                            (indices[i], indices[j]) = (indices[j], indices[i]);
+                        }
+                    }
+                }
+
+                // 获取前 34 个最大值的索引
+                uint256 count = nodeList.length < 34 ? nodeList.length : 34;
+                uint256[] memory topIndices = new uint256[](count);
+                for (uint256 i = 0; i < count; i++) {
+                    topIndices[i] = indices[i];
+                }
+
+                return topIndices;
+            }
+
+               function powerNodeMiningPool(uint256 nodeindex) external  {
+                require(block.timestamp >= canwakuang2[msg.sender][nodeindex] + 24 hours, "not wa kuang");
+                canwakuang2[msg.sender][nodeindex]=block.timestamp;
+                require(nodeindex < nodeList.length, "Invalid node index");
+
+                 if (totalMintNum >= 1000000e18 && totalMintNum < 2000000e18 && alreadyNum == 0) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 1;
+                    } else if (totalMintNum >= 2000000e18 && totalMintNum < 3000000e18 && alreadyNum == 1) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 2;
+                    } else if (totalMintNum >= 3000000e18 && totalMintNum < 4000000e18 && alreadyNum == 2) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 3;
+                    } else if (totalMintNum >= 4000000e18 && alreadyNum == 3) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 4;
+                    }
+
+                
+
+                // 确定节点的条件
+                bool isValidNode = (nodeList[nodeindex].index == 0 && nodeList[nodeindex].votingAmount >= 10000e18) ||
+                                (nodeList[nodeindex].index == 1 && nodeList[nodeindex].votingAmount >= 3000e18);
+
+                if (isValidNode) {
+                    uint256[] memory topIndices = getTopVotingAmounts();
+                    bool isInList = isIndexInVotingAmounts(topIndices, nodeindex);
+                    uint256 truetotalVotingAmount = 0;
+
+                    if (isInList) {
+                        // 计算符合条件的总投票金额
+                        for (uint256 i = 0; i < topIndices.length; i++) {
+                            if ((nodeList[topIndices[i]].index == 0 && nodeList[topIndices[i]].votingAmount >= 10000e18) ||
+                                (nodeList[topIndices[i]].index == 1 && nodeList[topIndices[i]].votingAmount >= 3000e18)) {
+                                truetotalVotingAmount += nodeList[topIndices[i]].votingAmount;
+                            }
+                        }
+
+                        // 确保总投票金额大于零
+                        if (truetotalVotingAmount > 0) {
+                            address nodeAddress = nodeList[nodeindex].nodeAddress;
+                            uint256 rewardShare = (nodeList[nodeindex].votingAmount * PowerNodeMiningPool) / truetotalVotingAmount;
+
+                            // 更新奖励
+                            nodeRewardShare[nodeAddress][nodeList[nodeindex].nodeindex] += rewardShare;
+                            PowerNodeMiningPoolnodeRewardShare[nodeAddress][nodeList[nodeindex].nodeindex] += rewardShare;
+                            totalMintNum += rewardShare;
+                            PowerNodeMiningPoolNum += rewardShare;
+                        }
+                    }
+                }
+            }
+                  
+                
+
+                function votingPool() external  {
+                    require(block.timestamp >= canwakuang3[msg.sender] + 24 hours, "not wa kuang");
+                    canwakuang3[msg.sender]=block.timestamp;
+
+
+                     if (totalMintNum >= 1000000e18 && totalMintNum < 2000000e18 && alreadyNum == 0) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 1;
+                    } else if (totalMintNum >= 2000000e18 && totalMintNum < 3000000e18 && alreadyNum == 1) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 2;
+                    } else if (totalMintNum >= 3000000e18 && totalMintNum < 4000000e18 && alreadyNum == 2) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 3;
+                    } else if (totalMintNum >= 4000000e18 && alreadyNum == 3) {
+                        EquallySharedMiningPool /= 2;
+                        PowerNodeMiningPool /= 2;
+                        VotingPool /= 2;
+                        alreadyNum = 4;
+                    }
+                    // 检查总投票金额是否大于零
+                    if (totalVotingAmount > 0) {
+                        for (uint256 i = 0; i < nodeList.length; i++) {
+                            uint256 nodeIndex = nodeList[i].nodeindex;
+                            uint256 userVotingAmount = userVotingList[msg.sender][nodeIndex].amount;
+
+                            // 仅在用户的投票金额大于零时才计算奖励份额
+                            if (userVotingAmount > 0) {
+                                uint256 RewardShare = (userVotingAmount * VotingPool) / totalVotingAmount;
+                                // 更新奖励
+                                nodeRewardShare[msg.sender][nodeIndex] += RewardShare;
+                                totalMintNum += RewardShare;
+                                VotingPoolNum += RewardShare;
+                            }
+                        }
+                    }
+                }
+
+
+                function unStake(uint256 nodeindex)external {
+                    require(block.timestamp>=userVotingList[msg.sender][nodeindex].time,"stake time not end");
+                    uint256 stakeAmount=userVotingList[msg.sender][nodeindex].amount;
+                    uint256 rewardAmount=nodeRewardShare[msg.sender][nodeindex]*90/100;
+                    uint256 rewardAmountTofun=nodeRewardShare[msg.sender][nodeindex]*10/100;
+                    userVoteNum[msg.sender]-=stakeAmount;
+                    totalVotingAmount-=stakeAmount;
+                    nodeRewardShare[msg.sender][nodeindex]=0;
+                    userVotingList[msg.sender][nodeindex].amount=0;
+                    nodeList[nodeindex].votingAmount-=stakeAmount;
+                    BNSToken.transfer(msg.sender,stakeAmount+rewardAmount);
+                    BNSToken.transfer(fun,rewardAmountTofun);
+                    
+                    emit UnStakeEvent(msg.sender,stakeAmount,block.timestamp);
+                }
+
+                 function withDraw(uint256 nodeindex)external {
+                    uint256 amount=nodeRewardShare[msg.sender][nodeindex]*90/100;
+                    uint256 tofun=nodeRewardShare[msg.sender][nodeindex]*10/100;
+                    EquallySharedMiningPoolnodeRewardShare[msg.sender][nodeindex]=0;
+                    PowerNodeMiningPoolnodeRewardShare[msg.sender][nodeindex]=0;
+                    nodeRewardShare[msg.sender][nodeindex]=0;
+                    require(BNSToken.transfer(msg.sender, amount),"transfer bns fail");
+                    require(BNSToken.transfer(fun, tofun),"transfer bns fail");
+                    emit WithDrawEvent(msg.sender,amount,tofun);
+                 }
+                
+
+                function setVote(address[]memory addrs,uint256[]memory amounts,uint256[]memory nodeindexs)external onlyOwner{
+                    require(addrs.length == amounts.length && amounts.length == nodeindexs.length, "Array lengths must be equal");
+                    for (uint256 i = 0; i < addrs.length; i++) {
+                            userVotingList[addrs[i]][nodeindexs[i]].index = nodeindexs[i];
+                            userVotingList[addrs[i]][nodeindexs[i]].amount += amounts[i];
+                            userVotingList[addrs[i]][nodeindexs[i]].time = block.timestamp + staketime;
+                            nodeList[nodeindexs[i]].votingAmount+=amounts[i];
+                            userVoteNum[addrs[i]]+=amounts[i];
+                            totalVotingAmount+=amounts[i];
+                        }
+                }
+
+                //["0x525101683837048093682a5a7d5c86f18add6a11","0x03a734243e065f8440c79cb7a377f384f0a73c80","0x03a734243e065f8440c79cb7a377f384f0a73c80","0x03a734243e065f8440c79cb7a377f384f0a73c80","0x1f6c82f0db703b1cab7622afddf3e8fbf3fdd36d","0x03a734243e065f8440c79cb7a377f384f0a73c80","0xcdd67411a2bd3eea7f4d03501ac76a092f747e74","0xf73d47f71945796dd3b807a0dad95e009a63f9af","0x0d1b136654fbfb6190c42e31dc8ed5e07abfde73","0x8fd64417ca10e2c3749364424c092666b0574a56","0x485e56acc0a6c3374022ec7a92d288ad7cff4011","0x91eba426960c543c0453fd41a3c22d0776d7871d","0x7a3f8c76e9d9f1564e42020344c2e03e85ec7575","0x15e029aee9c48a06d4fcd42d063eaf7131fcb0fa","0x51ce44a941a0e02454774e9490192760cba659ad","0x29ed610698dfdf9d83e172207d94bddc23375ca0","0xf896088024a045916322b556957bc561f65e542e","0xc7e5b8fa897b34f796f1e7b768ea72e144e564c5","0x01ab34a34030bb4fc9193dd14d1d4334bc39b241","0x9944f2c652cccc2baab2a09715b2821e41df27e4","0x9fd42d36fe1fec2498418d5c9ed8264ea00fe56b","0x12f9a53e7c02308e105466fdb8ae138493916566","0x16fbedbed38ab5e0189d42d6e272d2b8316fda66","0x8559ebf8370dbea3e1d275d24177d81079873cb2","0xd34cc72480db4ddef4f9bf49e1e55554ce5826ff","0xe14ba12d83fb7762e266435477b99a4ba54f86c9","0xbaa78799eaf0cb0d78c3516cbbaead45feaa7ff9","0xdcd274f0b88085e5e7dc77e3d7ad142fcadff23f","0xbaa78799eaf0cb0d78c3516cbbaead45feaa7ff9","0xb9eecaf387d6a55180e7da71dbafe6903ac31770","0x413ff054410e8ab2e63e8cd1669092ef6ee9fb0c","0x764308bb07e6a73af2c9666be6a492330e87f807","0x685122db0ee1cd6ffc99fe468bf6f4de8b5e37e7","0xdcd274f0b88085e5e7dc77e3d7ad142fcadff23f","0x6e92f5e9f176d0b5f7f52f2662460bbefe4494a1","0x16fbedbed38ab5e0189d42d6e272d2b8316fda66","0x03a734243e065f8440c79cb7a377f384f0a73c80","0xae91229a6ce52434a3a1dbcd408e05d1dd4fcba8","0xc7e5b8fa897b34f796f1e7b768ea72e144e564c5","0xc3d2732ca7a5a7f94605145455b4acaaec34dea9","0x1b07536de44dd22801d7d9f6f8d000eeb6f75ed1","0x855d11bb617a58f70c96a9ff8c8a019bb098af3a","0x29105650b0b915f91762d03a0cd4e70607c82595","0x8a0d9ec1ab718e761f5770a60116bb40485d4acf","0x45cc6a0daa9dac0fd82d54115c534ab7610a745f","0xd9ab1ccad362c0d365b593aba79c0f8ceb519f17","0x93d0b161ab8c731155f0aefd90d1d5e55aa79a90","0x43210ad8589ffe215534450e5136c0ca258292a3","0x0e45894ab9295369bb07318828f014cc90001330","0x43210ad8589ffe215534450e5136c0ca258292a3","0x11162b3983ba114d83383b996a830ef574c9bac6","0x9fd42d36fe1fec2498418d5c9ed8264ea00fe56b","0x91877ecae6e15d38d06ba2efe982f3934f85e663","0x785474f417e1c40f0c1cf39f79f2dd35ddafcd9e","0xfea29d8e84c7c222fc85da55b638e66a0d8b82f5","0x965734c974e72c126cf8653174ee09ec95417090","0xaba1eae3872b4e531efbbe8b68e4f10a24ba0c77","0xa3b75972c0b7dc224a422b3704ed0301d5273445","0x8a0d9ec1ab718e761f5770a60116bb40485d4acf","0x8bc59819d3bd7197bd62614dc4d11a7cae6fa2f4","0xb928aabb3089be363e4aed41118854df35ee9015","0x528d10b8b9fd36e0c0fbe109f67a9c2111f1bec6","0x28b824042179011086a0f79785c1b15122a9ea05","0x0bfbe3e6b5161ad8ee14899e858e9bd773348f57","0xb2e7aeea715546de52613e289b329eebd702ce42","0xacb1772653857ff26482f1e63021596271d5cac5","0xd4e94b2e2f91e3103b5a93cf0e4c4f4d7e2d4cd1","0x36b84c970779942e06bd874e5d5d9f0b0ed232ad","0x0e45894ab9295369bb07318828f014cc90001330","0xb705fa8cbebacc25043567111b2994d634914563","0xa3b75972c0b7dc224a422b3704ed0301d5273445","0xfc9df360260708e760c7424dacb3d5c52cbb38c6","0xd8987013f36b8bdb49946377b03db049e8d4e37e","0x5bb6c094b2c007c20d42aa53124e79c92d5bddee","0xdefbe2a48d901a1b62d82d649435d2468515971d","0xb705fa8cbebacc25043567111b2994d634914563","0x8a3da4a7996ad16ef332cc5a4de1be0e1c49377b","0xa5a9e9b86881f55c7ffb5247b2751a1a6346b12b","0xd4e94b2e2f91e3103b5a93cf0e4c4f4d7e2d4cd1","0x610fe6a1008eb3030105f777c2906da4f5f6bf8c","0xd4e94b2e2f91e3103b5a93cf0e4c4f4d7e2d4cd1","0x69c1926f6193145d3aa2b9a3a56b9074105a21a9","0x118c82be3da37fa3bfc7857cfb9f6e2b5fec2997","0x8dcdb50439a1d5be4b194a0e8d69ecca3fd46651","0x289931046e6521e9f87b8f378d6a035897dbffec","0x80d78066a8c69f5d15a00d5ce3084b66298370de","0xaccf919dad3d3a1ed59e564ecfe22a34ebefbc4e","0x80d78066a8c69f5d15a00d5ce3084b66298370de","0xbc940e7067b2b47349894c0faf57abab3b40414e","0x80d78066a8c69f5d15a00d5ce3084b66298370de","0xb2203e0b9a34437037ffda02c1b5057bcb8323e3","0x20bb54d8b2a12baff93ae180e560ca0296195f33","0x37aa1877b6c6c97911e5835a82e3350a6b95eaed","0x2343754046cc44f4b36878e8d5b36bc6c0995ab1","0x9d080de3f85b61d60ab5468122077a414bc20529","0x9d080de3f85b61d60ab5468122077a414bc20529","0xa60afbcf327ddb8268b1a8cdefaf0c23bfe32f2b","0x610fe6a1008eb3030105f777c2906da4f5f6bf8c","0x2343754046cc44f4b36878e8d5b36bc6c0995ab1","0xf1b7fd89ac4ce2c650a7952a5b7b945af7208802","0xd4e94b2e2f91e3103b5a93cf0e4c4f4d7e2d4cd1","0xbc3cef341f1ffedcfe0a535e70a83d134ecf7211","0xabae953e9a5717ceeab43e0c275d7b69e4e77350","0x80d78066a8c69f5d15a00d5ce3084b66298370de","0x3f6697b4b63b6ee3a2bb17609a01f5d6bfe2706f","0xb2e7aeea715546de52613e289b329eebd702ce42","0x7d4ed70770926cda542404a8eb3752784e65fbb2","0x9d080de3f85b61d60ab5468122077a414bc20529","0x4e7e764954608e4d4e947df190f3e8e66d987d92","0x6affda0a1f730f6375491e68d83010bc06cbae47","0xc20be6d02b0672212b0f07e7021741b9d329c819","0x345cbc52e4ae0f83472cb389932f2384748588a8","0x91f1ad332ea4decc2abb1438f1da2afaa3e1c726","0x627d198952719426810980717ed5496fd4949754","0x1e1e27442cf15a652c4fc6c450b40fad3f1ae802","0x4a273b86cb6a8cafd1789c0e6765f73fe0219a29","0x1e1e27442cf15a652c4fc6c450b40fad3f1ae802","0xbe41c09124fe6bcd594790e496a410c4960815a7","0xbb55b502ea83c3691fdc7fdb30f08a01232e4c33","0x2ef12867ce8d7f73c2950cff4d42144f59a5be90","0x6dcae9ecab6f78c28604324d286a10eefbcab9ea","0xf0229962d1e3c940825e7719b53727ec42eb0ead","0x0f7eebdaee70eb04ce8df16ceb8a33967411038e","0x76e0a1ef5b0aa16a99dd5a7d3083faf632751163","0x8fed9700cfdc8b9023c1a010511a3e139275cf82","0x3305ac111e027abc8a2f738d8de250d01bb3aef3","0x76e0a1ef5b0aa16a99dd5a7d3083faf632751163","0x41417ad74b3ddc03c8f53693f825f1d6103ad2c2","0x4061aba7bede4f386f4ca380942ca20d74f6e88f","0x490deed91d0c2ff89ed0b035f93db196d5c1dc54","0x631c7b29bbe6649477b8975c21ad458e19774c08","0xeb4da53dbf3073e418ee61604fdd25975d71336a","0x631c7b29bbe6649477b8975c21ad458e19774c08","0x421b06649beed22eed7c2d8532cf817733f8dd43","0x631c7b29bbe6649477b8975c21ad458e19774c08","0x631c7b29bbe6649477b8975c21ad458e19774c08","0xafee2762554364a3e7195ff7fa7172f44df4b361","0x2de6a886dc142a814c8002c1d63d689b29aec014","0x85306f595e91c7306bc448c7392b9606699e8160","0x00fdc5dafa8a78cb736745eff3a10fa6c8971782","0x644dcf1bc870c3936fffe227cab6b94319798ac3","0xd8935cc132cd7c3d17d2d958b1ab80c35eb150d5","0xa8c1363c98f59166edb7f8d099542ab52b9ee1c6","0xf87466e02c3fd5d885bbc5ac913dc54d3d6a232f","0x3b9871b91929aca87ee0b69b7a03d36073f6f8cc","0x88eb15e6c66b8eac1527411f2db8610d73fbb774","0xb63898a05193b1489ea9a0696816581ac3ce91ed","0x8559ebf8370dbea3e1d275d24177d81079873cb2","0xb14d795be0889b7349f87a9859bf5e1e544c280b","0xaf1ed98ca58334125eec3b11be9ef210d237c30c","0x1b26bc88c4db98dee224c33ef6acfa82706e020b","0x8de22e2a6df01f6aad351f73307419a19528ed3a","0x69c1926f6193145d3aa2b9a3a56b9074105a21a9","0xd30dec3b93055f18318aceebc1e57dda69999f43","0xa6936c9cdf997db76fc20c5859872fb164d910c4","0xbe3b9ab72dd0c62a0025b90c848e804c1afab20f","0xb2c1875e8f207955f959d4762063868d00ebc665","0xa8c1363c98f59166edb7f8d099542ab52b9ee1c6","0x88b98bbaf1bcdeef8c6873bbcac679cbd96569af","0x68941d1f2e3164673f15a8f463f5ac70e51edf86","0x8d7e008340b6cba10a463580780d71271736f197","0x02d360d64cdac89d3e52c9b4384c02e098ec37b8","0x735c96ae583cce72244bd9595f3bb0ffe571c922","0x66d95f3aeb28e7bc5615359c4327c65120f133c6","0xc961c9aecfd8a9a2badefc58099213dbfe7f01c6","0xcab3d3bba21f3febd84fe2a64432fa3394c7df56","0xeb9dba4cde81d460621ee36e307957761c725f07","0x66b38b58fa3dc68732a4e4b7a64553db3a8956ef","0x0b09738ca10752fb35baf7e3b082f79a6ffe7a6f","0x05341e6fb5b64b0c62384b53998ce07eed21501e","0xeb55c309427c7e649bc78cc630599a017e55ca0e","0x17192b770957555880cb89a71ee0df21bc30963d","0x87da29031d1f5f1c39bf461de22643b45ac54243","0xe47520564d4cf87937fc9cf92f3b21fc2ebffe25","0x7a716cbf0e8cddeed6e0949043991a615a8d16c5","0x2a7a310b37bea6bd5a6b044923e933bb9d198276","0xe47520564d4cf87937fc9cf92f3b21fc2ebffe25","0xecde211281f685174e522828fa681e54d811e61d","0xa3ba82cbd8958dfba2c85873e376645ace246dba","0x5225507092d8a23d347366e6b05977d1c006cb4c","0x43cca80fc477b6355115241de2713358103523dd","0xb30418f538c6aeafa8486dcf03638ec9e6671b24","0xe47520564d4cf87937fc9cf92f3b21fc2ebffe25","0xd8c25e30361efbf58a83173c534709837a912470","0xfba60385d2c4af7028c8215fa77a77aa433ba16f","0x7a3f8c76e9d9f1564e42020344c2e03e85ec7575","0x3f342c6be53d58611b033106858da86e6e75d1e9","0xe326037bd14c06e1edc8adeec82d6ea03533f30d","0xc176dc536546a0892c356ec5c4ab2b7170627f23","0xdabad30ce7addfc4a4e9cca19e183d5fb4d05c82","0x3f342c6be53d58611b033106858da86e6e75d1e9","0x8bc59819d3bd7197bd62614dc4d11a7cae6fa2f4","0x746d6d01feeee7ba4dd5721fcc4f3706d863339a","0x631c7b29bbe6649477b8975c21ad458e19774c08","0x746d6d01feeee7ba4dd5721fcc4f3706d863339a","0x43fa4a2cfa0fde7405e1d3d6bb857e6dd3a87317","0x7f6f30643b48067f0cc8d7d8a172abf82195718f","0x57ed9a8bfdcae3ad41bb12d5f02630834fb29347","0xf1f69268032130cb5cb3abc12761626f5dd67a41","0xe326037bd14c06e1edc8adeec82d6ea03533f30d","0xc08fbd2bf795e3b4f8b4be1da5f7c33c27aba571","0x746d6d01feeee7ba4dd5721fcc4f3706d863339a","0x31b0ebe86e65d9dc96a982d2a66528d7fea974d4","0xcf9e8ef63ec0afc81d2e79b3c09d1b2db9a87d70","0x746d6d01feeee7ba4dd5721fcc4f3706d863339a","0x522832aabf0f46f5f7ae26f228f79c53699e3e8a","0x5225507092d8a23d347366e6b05977d1c006cb4c","0x315779b330e345cae11538a80ae1cddd8cf9d9b1","0xf02926d55b7c87032f1f0adc8479279a07be7d08","0xc7002111bbe401672c8696057b2f8c60cde60a72","0xe40c12a78928292df3f4725ef6898602868daf37","0x10d970b77aa2f4871b774f90d5f2f12081ecab9b","0xf1f69268032130cb5cb3abc12761626f5dd67a41","0x6fb9f1461ceeef40f5c1e3f8e4a57c0f342598a6","0x561c3b54f14136448d85906ec099a3beda8fba48","0x06befcf68becc7ecdb8e4e1202caa8a07165b428","0x04e6a253588c5a72167b7b1209cc8dca1880119d","0x96d6edbe930be9b27373af04801bbf6a83ffa72f"]
+                //[1000000000000000000,10000000000000000000,5000000000000000000,10000000000000000000,12000000000000000000,20000000000000000000,49000000000000000000,9777000000000000000000,278000000000000000000,5571000000000000000000,90000000000000000000,234000000000000000000,5000000000000000000000,196000000000000000000,3043000000000000000000,1000000000000000000,10000000000000000000,100000000000000000000,400000000000000000000,386000000000000000000,70000000000000000000,880000000000000000000,1000000000000000000,10000000000000000000,10000000000000000000000,10000000000000000000000,30000000000000000000,500000000000000000000,170000000000000000000,500000000000000000000,800000000000000000000,21780000000000000000000,1000000000000000000,510000000000000000000,20240000000000000000000,1620000000000000000000,2600000000000000000000,190000000000000000000,622000000000000000000,1300000000000000000000,12268000000000000000000,4999000000000000000000,2996000000000000000000,10000000000000000000,2057000000000000000000,1960000000000000000000,10000000000000000000000,41000000000000000000,100000000000000000000,4900000000000000000000,2030000000000000000000,11000000000000000000,362000000000000000000,1391000000000000000000,2851000000000000000000,594000000000000000000,1500000000000000000000,1703000000000000000000,2000000000000000000000,1282000000000000000000,160000000000000000000,10000000000000000000000,3847000000000000000000,443000000000000000000,10000000000000000000,1200000000000000000000,10000000000000000000,3338000000000000000000,3888000000000000000000,10000000000000000000,4019000000000000000000,2016000000000000000000,59000000000000000000,1000000000000000000000,1787000000000000000000,4142000000000000000000,4402000000000000000000,1755000000000000000000,30000000000000000000,10000000000000000000,9000000000000000000000,8000000000000000000,2643000000000000000000,1998000000000000000000,3233000000000000000000,30000000000000000000,2000000000000000000000,500000000000000000000,200000000000000000000,20000000000000000000000,2010000000000000000000,2000000000000000000000,1637000000000000000000,5000000000000000000,9000000000000000000,2580000000000000000000,5000000000000000000000,2300000000000000000000,600000000000000000000,3000000000000000000000,10000000000000000000000,120000000000000000000,1300000000000000000000,10000000000000000000000,1028000000000000000000,1566000000000000000000,2079000000000000000000,3000000000000000000000,10014000000000000000000,800000000000000000000,2000000000000000000000,2000000000000000000000,2000000000000000000000,2000000000000000000000,5782000000000000000000,4278000000000000000000,5000000000000000000000,2000000000000000000000,12000000000000000000000,3000000000000000000000,12000000000000000000000,920000000000000000000,13000000000000000000000,2000000000000000000,520000000000000000000,12000000000000000000000,607000000000000000000,9900000000000000000000,815000000000000000000,3500000000000000000000,50000000000000000000,138000000000000000000,50000000000000000000,3547000000000000000000,50000000000000000000,33000000000000000000,10000000000000000000000,3133000000000000000000,1000000000000000000000,2001000000000000000000,10000000000000000000000,10000000000000000000000,90000000000000000000,10046000000000000000000,10000000000000000000000,15000000000000000000000,1379000000000000000000,3294000000000000000000,20000000000000000000000,138000000000000000000,2450000000000000000000,10000000000000000000000,40000000000000000000,10000000000000000000000,10800000000000000000000,111000000000000000000,10000000000000000000000,100000000000000000000,11870000000000000000000,10100000000000000000000,970000000000000000000,2000000000000000000000,5298000000000000000000,11900000000000000000000,1000000000000000000000,10000000000000000000000,10200000000000000000000,53000000000000000000,10000000000000000000000,130000000000000000000,9310000000000000000000,5000000000000000000,5900000000000000000000,2796000000000000000000,2000000000000000000000,1944000000000000000000,2102000000000000000000,280000000000000000000,1307000000000000000000,16000000000000000000,2000000000000000000000,4889000000000000000000,823000000000000000000,2856000000000000000000,377000000000000000000,886000000000000000000,10000000000000000000,98000000000000000000,200000000000000000000,86000000000000000000,3204000000000000000000,537000000000000000000,10000000000000000000,112000000000000000000,90000000000000000000,300000000000000000000,2145000000000000000000,10000000000000000000000,474000000000000000000,39000000000000000000,10000000000000000000000,1200000000000000000000,8600000000000000000000,4000000000000000000000,1500000000000000000000,3000000000000000000000,2599000000000000000000,100000000000000000000,185000000000000000000,600000000000000000000,868000000000000000000,317000000000000000000,303000000000000000000,262000000000000000000,300000000000000000000,666000000000000000000,400000000000000000000,2000000000000000000000]
+                //[0,0,2,1,4,18,6,6,7,6,6,5,6,5,6,22,5,5,6,8,20,8,2,4,2,1,5,5,5,6,18,4,7,2,2,4,6,7,2,18,2,6,2,2,3,4,4,9,19,9,4,0,18,9,5,18,18,9,2,18,7,1,9,6,20,18,3,9,19,21,9,5,9,18,6,21,18,6,3,6,3,6,8,1,6,0,6,0,18,0,8,1,5,6,17,17,1,6,6,18,3,6,7,0,6,20,7,17,20,7,1,1,1,1,16,20,17,1,15,1,14,8,13,6,6,12,6,11,6,10,8,8,2,5,4,1,4,20,6,5,1,1,18,3,1,1,6,4,1,6,5,2,6,2,2,6,2,18,2,4,6,6,6,4,6,4,4,0,4,6,7,22,6,5,6,0,5,7,20,22,6,20,5,20,20,6,0,8,6,7,0,18,5,1,5,6,5,1,18,8,4,5,6,8,5,20,7,5,7,8,6,6,18,9,18,5,7,2]
+
+
+                function setVotinglists(address[]memory addrs)external onlyOwner{
+                    for(uint256 i=0;i<addrs.length;i++){
+                        votingAddrs.push(addrs[i]);
+                    }
+                }
+                //["0x88b98bbaf1bcdeef8c6873bbcac679cbd96569af","0x00fdc5dafa8a78cb736745eff3a10fa6c8971782","0x01ab34a34030bb4fc9193dd14d1d4334bc39b241","0x02d360d64cdac89d3e52c9b4384c02e098ec37b8","0x03a734243e065f8440c79cb7a377f384f0a73c80","0x04e6a253588c5a72167b7b1209cc8dca1880119d","0x05341e6fb5b64b0c62384b53998ce07eed21501e","0x06befcf68becc7ecdb8e4e1202caa8a07165b428","0x0b09738ca10752fb35baf7e3b082f79a6ffe7a6f","0x0bfbe3e6b5161ad8ee14899e858e9bd773348f57","0x0d1b136654fbfb6190c42e31dc8ed5e07abfde73","0x0e45894ab9295369bb07318828f014cc90001330","0x0f7eebdaee70eb04ce8df16ceb8a33967411038e","0x10d970b77aa2f4871b774f90d5f2f12081ecab9b","0x11162b3983ba114d83383b996a830ef574c9bac6","0x118c82be3da37fa3bfc7857cfb9f6e2b5fec2997","0x12f9a53e7c02308e105466fdb8ae138493916566","0x15e029aee9c48a06d4fcd42d063eaf7131fcb0fa","0x16fbedbed38ab5e0189d42d6e272d2b8316fda66","0x17192b770957555880cb89a71ee0df21bc30963d","0x1b07536de44dd22801d7d9f6f8d000eeb6f75ed1","0x1b26bc88c4db98dee224c33ef6acfa82706e020b","0x1e1e27442cf15a652c4fc6c450b40fad3f1ae802","0x1f6c82f0db703b1cab7622afddf3e8fbf3fdd36d","0x20bb54d8b2a12baff93ae180e560ca0296195f33","0x2343754046cc44f4b36878e8d5b36bc6c0995ab1","0x289931046e6521e9f87b8f378d6a035897dbffec","0x28b824042179011086a0f79785c1b15122a9ea05","0x29105650b0b915f91762d03a0cd4e70607c82595","0x29ed610698dfdf9d83e172207d94bddc23375ca0","0x2a7a310b37bea6bd5a6b044923e933bb9d198276","0x2de6a886dc142a814c8002c1d63d689b29aec014","0x2ef12867ce8d7f73c2950cff4d42144f59a5be90","0x315779b330e345cae11538a80ae1cddd8cf9d9b1","0x31b0ebe86e65d9dc96a982d2a66528d7fea974d4","0x3305ac111e027abc8a2f738d8de250d01bb3aef3","0x345cbc52e4ae0f83472cb389932f2384748588a8","0x36b84c970779942e06bd874e5d5d9f0b0ed232ad","0x37aa1877b6c6c97911e5835a82e3350a6b95eaed","0x3b9871b91929aca87ee0b69b7a03d36073f6f8cc","0x3f342c6be53d58611b033106858da86e6e75d1e9","0x3f6697b4b63b6ee3a2bb17609a01f5d6bfe2706f","0x4061aba7bede4f386f4ca380942ca20d74f6e88f","0x413ff054410e8ab2e63e8cd1669092ef6ee9fb0c","0x41417ad74b3ddc03c8f53693f825f1d6103ad2c2","0x421b06649beed22eed7c2d8532cf817733f8dd43","0x43210ad8589ffe215534450e5136c0ca258292a3","0x43210ad8589ffe215534450e5136c0ca258292a3","0x43cca80fc477b6355115241de2713358103523dd","0x43fa4a2cfa0fde7405e1d3d6bb857e6dd3a87317","0x45cc6a0daa9dac0fd82d54115c534ab7610a745f","0x485e56acc0a6c3374022ec7a92d288ad7cff4011","0x490deed91d0c2ff89ed0b035f93db196d5c1dc54","0x4a273b86cb6a8cafd1789c0e6765f73fe0219a29","0x4e7e764954608e4d4e947df190f3e8e66d987d92","0x51ce44a941a0e02454774e9490192760cba659ad","0x5225507092d8a23d347366e6b05977d1c006cb4c","0x522832aabf0f46f5f7ae26f228f79c53699e3e8a","0x525101683837048093682a5a7d5c86f18add6a11","0x528d10b8b9fd36e0c0fbe109f67a9c2111f1bec6","0x561c3b54f14136448d85906ec099a3beda8fba48","0x57ed9a8bfdcae3ad41bb12d5f02630834fb29347","0x5bb6c094b2c007c20d42aa53124e79c92d5bddee","0x610fe6a1008eb3030105f777c2906da4f5f6bf8c","0x627d198952719426810980717ed5496fd4949754","0x631c7b29bbe6649477b8975c21ad458e19774c08","0x644dcf1bc870c3936fffe227cab6b94319798ac3","0x66b38b58fa3dc68732a4e4b7a64553db3a8956ef","0x66d95f3aeb28e7bc5615359c4327c65120f133c6","0x685122db0ee1cd6ffc99fe468bf6f4de8b5e37e7","0x68941d1f2e3164673f15a8f463f5ac70e51edf86","0x69c1926f6193145d3aa2b9a3a56b9074105a21a9","0x6affda0a1f730f6375491e68d83010bc06cbae47","0x6dcae9ecab6f78c28604324d286a10eefbcab9ea","0x6e92f5e9f176d0b5f7f52f2662460bbefe4494a1","0x6fb9f1461ceeef40f5c1e3f8e4a57c0f342598a6","0x735c96ae583cce72244bd9595f3bb0ffe571c922","0x746d6d01feeee7ba4dd5721fcc4f3706d863339a","0x764308bb07e6a73af2c9666be6a492330e87f807","0x76e0a1ef5b0aa16a99dd5a7d3083faf632751163","0x785474f417e1c40f0c1cf39f79f2dd35ddafcd9e","0x7a3f8c76e9d9f1564e42020344c2e03e85ec7575","0x7a716cbf0e8cddeed6e0949043991a615a8d16c5","0x7d4ed70770926cda542404a8eb3752784e65fbb2","0x7f6f30643b48067f0cc8d7d8a172abf82195718f","0x80d78066a8c69f5d15a00d5ce3084b66298370de","0x85306f595e91c7306bc448c7392b9606699e8160","0x8559ebf8370dbea3e1d275d24177d81079873cb2","0x855d11bb617a58f70c96a9ff8c8a019bb098af3a","0x87da29031d1f5f1c39bf461de22643b45ac54243","0x88eb15e6c66b8eac1527411f2db8610d73fbb774","0x8a0d9ec1ab718e761f5770a60116bb40485d4acf","0x8a3da4a7996ad16ef332cc5a4de1be0e1c49377b","0x8bc59819d3bd7197bd62614dc4d11a7cae6fa2f4","0x8d7e008340b6cba10a463580780d71271736f197","0x8dcdb50439a1d5be4b194a0e8d69ecca3fd46651","0x8de22e2a6df01f6aad351f73307419a19528ed3a","0x8fd64417ca10e2c3749364424c092666b0574a56","0x8fed9700cfdc8b9023c1a010511a3e139275cf82","0x91877ecae6e15d38d06ba2efe982f3934f85e663","0x91eba426960c543c0453fd41a3c22d0776d7871d","0x91f1ad332ea4decc2abb1438f1da2afaa3e1c726","0x93d0b161ab8c731155f0aefd90d1d5e55aa79a90","0x965734c974e72c126cf8653174ee09ec95417090","0x96d6edbe930be9b27373af04801bbf6a83ffa72f","0x9944f2c652cccc2baab2a09715b2821e41df27e4","0x9d080de3f85b61d60ab5468122077a414bc20529","0x9fd42d36fe1fec2498418d5c9ed8264ea00fe56b","0xa3b75972c0b7dc224a422b3704ed0301d5273445","0xa3ba82cbd8958dfba2c85873e376645ace246dba","0xa5a9e9b86881f55c7ffb5247b2751a1a6346b12b","0xa60afbcf327ddb8268b1a8cdefaf0c23bfe32f2b","0xa6936c9cdf997db76fc20c5859872fb164d910c4","0xa8c1363c98f59166edb7f8d099542ab52b9ee1c6","0xaba1eae3872b4e531efbbe8b68e4f10a24ba0c77","0xabae953e9a5717ceeab43e0c275d7b69e4e77350","0xacb1772653857ff26482f1e63021596271d5cac5","0xaccf919dad3d3a1ed59e564ecfe22a34ebefbc4e","0xae91229a6ce52434a3a1dbcd408e05d1dd4fcba8","0xaf1ed98ca58334125eec3b11be9ef210d237c30c","0xafee2762554364a3e7195ff7fa7172f44df4b361","0xb14d795be0889b7349f87a9859bf5e1e544c280b","0xb2203e0b9a34437037ffda02c1b5057bcb8323e3","0xb2c1875e8f207955f959d4762063868d00ebc665","0xb2e7aeea715546de52613e289b329eebd702ce42","0xb30418f538c6aeafa8486dcf03638ec9e6671b24","0xb63898a05193b1489ea9a0696816581ac3ce91ed","0xb705fa8cbebacc25043567111b2994d634914563","0xb928aabb3089be363e4aed41118854df35ee9015","0xb9eecaf387d6a55180e7da71dbafe6903ac31770","0xbaa78799eaf0cb0d78c3516cbbaead45feaa7ff9","0xbb55b502ea83c3691fdc7fdb30f08a01232e4c33","0xbc3cef341f1ffedcfe0a535e70a83d134ecf7211","0xbc940e7067b2b47349894c0faf57abab3b40414e","0xbe3b9ab72dd0c62a0025b90c848e804c1afab20f","0xbe41c09124fe6bcd594790e496a410c4960815a7","0xc08fbd2bf795e3b4f8b4be1da5f7c33c27aba571","0xc176dc536546a0892c356ec5c4ab2b7170627f23","0xc20be6d02b0672212b0f07e7021741b9d329c819","0xc3d2732ca7a5a7f94605145455b4acaaec34dea9","0xc7002111bbe401672c8696057b2f8c60cde60a72","0xc7e5b8fa897b34f796f1e7b768ea72e144e564c5","0xc961c9aecfd8a9a2badefc58099213dbfe7f01c6","0xcab3d3bba21f3febd84fe2a64432fa3394c7df56","0xcdd67411a2bd3eea7f4d03501ac76a092f747e74","0xcf9e8ef63ec0afc81d2e79b3c09d1b2db9a87d70","0xd30dec3b93055f18318aceebc1e57dda69999f43","0xd34cc72480db4ddef4f9bf49e1e55554ce5826ff","0xd4e94b2e2f91e3103b5a93cf0e4c4f4d7e2d4cd1","0xd8935cc132cd7c3d17d2d958b1ab80c35eb150d5","0xd8987013f36b8bdb49946377b03db049e8d4e37e","0xd8c25e30361efbf58a83173c534709837a912470","0xd9ab1ccad362c0d365b593aba79c0f8ceb519f17","0xdabad30ce7addfc4a4e9cca19e183d5fb4d05c82","0xdcd274f0b88085e5e7dc77e3d7ad142fcadff23f","0xdefbe2a48d901a1b62d82d649435d2468515971d","0xe14ba12d83fb7762e266435477b99a4ba54f86c9","0xe326037bd14c06e1edc8adeec82d6ea03533f30d","0xe40c12a78928292df3f4725ef6898602868daf37","0xe47520564d4cf87937fc9cf92f3b21fc2ebffe25","0xeb4da53dbf3073e418ee61604fdd25975d71336a","0xeb55c309427c7e649bc78cc630599a017e55ca0e","0xeb9dba4cde81d460621ee36e307957761c725f07","0xecde211281f685174e522828fa681e54d811e61d","0xf0229962d1e3c940825e7719b53727ec42eb0ead","0xf02926d55b7c87032f1f0adc8479279a07be7d08","0xf1b7fd89ac4ce2c650a7952a5b7b945af7208802","0xf1f69268032130cb5cb3abc12761626f5dd67a41","0xf73d47f71945796dd3b807a0dad95e009a63f9af","0xf87466e02c3fd5d885bbc5ac913dc54d3d6a232f","0xf896088024a045916322b556957bc561f65e542e","0xfba60385d2c4af7028c8215fa77a77aa433ba16f","0xfc9df360260708e760c7424dacb3d5c52cbb38c6","0xfea29d8e84c7c222fc85da55b638e66a0d8b82f5"]
+
+                function setUserIsadd(address addr,uint256[]memory nodes)external onlyOwner{
+                    for(uint256 i=0;i<nodes.length;i++){
+                        userVoting[addr].push(nodes[i]);
+                    }
+                }
+
+                function set(address[]memory add,uint256[]memory nodes)external onlyOwner{
+                    for(uint256 i=0;i<add.length;i++){
+                        userVoting[add[i]].push(nodes[i]);
+                    }
+                }
+
+                function setnodeadduser(address[] memory addr,uint256 node)external onlyOwner{
+                    for(uint256 i=0;i<addr.length;i++){
+                        nodeVoting[node].push(addr[i]);
+                    }
+                }
+
+                function setopenlist(uint256[] memory nodes,bool[] memory isopen)external  onlyOwner{
+                    for(uint256 i=0;i<nodes.length;i++){
+                        nodeList[nodes[i]].isopen=isopen[i];
+                    }
+                }
+
+                function vote(uint256 amount, uint256 nodeIndex) external {
+                    require(amount >=1e18, "Amount must be greater than 1");
+                    require(nodeIndex < nodeList.length, "Invalid node index");
+                    require(BNSToken.balanceOf(msg.sender) >= amount, "Insufficient BNS tokens");
+                    require(BNSToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+                    //每个节点投票数
+                    nodeList[nodeIndex].votingAmount+=amount;
+                    //用户个人投票数
+                    userVoteNum[msg.sender]+=amount;
+
+                    totalVotingAmount+=amount;
+
+                    userVotingList[msg.sender][nodeIndex].index=nodeIndex;
+                    userVotingList[msg.sender][nodeIndex].amount+=amount;
+                    userVotingList[msg.sender][nodeIndex].time=block.timestamp+staketime;
+                    
+                
+                    bool isadd=isVotingAddr(msg.sender);
+
+                    if (isadd==false){
+                        votingAddrs.push(msg.sender);
+                    }
+
+                    bool isaddindex=isAddindex(msg.sender,nodeIndex);
+
+                    if(isaddindex==false){
+                        userVoting[msg.sender].push(nodeIndex);
+                    }
+
+                    bool isaddnode=isAddnode(msg.sender,nodeIndex);
+                    if(isaddnode==false){
+                        nodeVoting[nodeIndex].push(msg.sender);
+                    }
+
+                    emit VoteEvent(msg.sender, amount, nodeIndex);
+            }
+
+                function open(uint256 nodeIndex,bool _isopen)external onlyOwner{
+                    nodeList[nodeIndex].isopen=_isopen;
+                }
+
+                function isVotingAddr(address addr) internal view returns (bool) {
+                    for (uint256 i = 0; i < votingAddrs.length; i++) {
+                        if (votingAddrs[i] == addr) {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                function isAddindex(address user,uint256 nodeindex)internal  view returns(bool){
+                    uint256[] memory usernodeList=userVoting[user];
+                    for(uint256 i=0;i<usernodeList.length;i++){
+                        if(usernodeList[i]==nodeindex){
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                function isAddnode(address user,uint256 nodeindex)internal view returns(bool){
+                    address[]memory nodeAddrs=nodeVoting[nodeindex];
+                    for(uint256 i=0;i<nodeAddrs.length;i++){
+                        if(nodeAddrs[i]==user){
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+               
+
+
+
+
+               
+
+                function getUnstakeTime(uint256 nodeindex)external view returns(uint256){
+                    return userVotingList[msg.sender][nodeindex].time;
+                }
+
+                function getUnstakeAmount(uint256 nodeindex)external view returns(uint256){
+                    return userVotingList[msg.sender][nodeindex].amount;
+                }
+                
+                function getnodeRewardShare(uint256 nodeindex)external  view returns(uint256){
+                    return nodeRewardShare[msg.sender][nodeindex];
+                }
+
+                function getnodeList()external view returns (NodeInfo[] memory){
+                    return nodeList;
+                }
+
+                function bnsBalance()external view returns(uint256){
+                    return BNSToken.balanceOf(msg.sender);
+                }
+
+                function isSheQuZhang()external view returns(bool){
+                    for(uint256 i=0;i<shequAddrs.length;i++){
+                        if(shequAddrs[i]==msg.sender){
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                function getNodeVotingAmount(uint256 nodeIndex)external view returns(uint256){
+                   return  nodeList[nodeIndex].votingAmount;
+                }
+
+               function getUserVotinglist(address user)external view returns(uint256[]memory){
+                   return userVoting[user];
+               }
+
+               function getnodeVoting(uint256 nodeindex)external view returns(address[]memory){
+                return nodeVoting[nodeindex];
+               }
+
+               function getvotingInfo(address user,uint256 nodeindex)external view returns(User memory){
+                    return  userVotingList[user][nodeindex];
+               }
+
+               
+                
+                 
+
+            }

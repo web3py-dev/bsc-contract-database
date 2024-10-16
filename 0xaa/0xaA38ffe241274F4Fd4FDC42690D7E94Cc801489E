@@ -1,0 +1,607 @@
+
+// File: @openzeppelin/contracts/access/Ownable.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (access/Ownable.sol)
+
+pragma solidity ^0.8.20;
+
+import {Context} from "../utils/Context.sol";
+
+/**
+ * @dev Contract module which provides a basic access control mechanism, where
+ * there is an account (an owner) that can be granted exclusive access to
+ * specific functions.
+ *
+ * The initial owner is set to the address provided by the deployer. This can
+ * later be changed with {transferOwnership}.
+ *
+ * This module is used through inheritance. It will make available the modifier
+ * `onlyOwner`, which can be applied to your functions to restrict their use to
+ * the owner.
+ */
+abstract contract Ownable is Context {
+    address private _owner;
+
+    /**
+     * @dev The caller account is not authorized to perform an operation.
+     */
+    error OwnableUnauthorizedAccount(address account);
+
+    /**
+     * @dev The owner is not a valid owner account. (eg. `address(0)`)
+     */
+    error OwnableInvalidOwner(address owner);
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev Initializes the contract setting the address provided by the deployer as the initial owner.
+     */
+    constructor(address initialOwner) {
+        if (initialOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(initialOwner);
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if the sender is not the owner.
+     */
+    function _checkOwner() internal view virtual {
+        if (owner() != _msgSender()) {
+            revert OwnableUnauthorizedAccount(_msgSender());
+        }
+    }
+
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby disabling any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        if (newOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Internal function without access restriction.
+     */
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+
+// File: @openzeppelin/contracts/token/ERC20/IERC20.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (token/ERC20/IERC20.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Interface of the ERC20 standard as defined in the EIP.
+ */
+interface IERC20 {
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
+     * a call to {approve}. `value` is the new allowance.
+     */
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    /**
+     * @dev Returns the value of tokens in existence.
+     */
+    function totalSupply() external view returns (uint256);
+
+    /**
+     * @dev Returns the value of tokens owned by `account`.
+     */
+    function balanceOf(address account) external view returns (uint256);
+
+    /**
+     * @dev Moves a `value` amount of tokens from the caller's account to `to`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address to, uint256 value) external returns (bool);
+
+    /**
+     * @dev Returns the remaining number of tokens that `spender` will be
+     * allowed to spend on behalf of `owner` through {transferFrom}. This is
+     * zero by default.
+     *
+     * This value changes when {approve} or {transferFrom} are called.
+     */
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    /**
+     * @dev Sets a `value` amount of tokens as the allowance of `spender` over the
+     * caller's tokens.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * IMPORTANT: Beware that changing an allowance with this method brings the risk
+     * that someone may use both the old and the new allowance by unfortunate
+     * transaction ordering. One possible solution to mitigate this race
+     * condition is to first reduce the spender's allowance to 0 and set the
+     * desired value afterwards:
+     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+     *
+     * Emits an {Approval} event.
+     */
+    function approve(address spender, uint256 value) external returns (bool);
+
+    /**
+     * @dev Moves a `value` amount of tokens from `from` to `to` using the
+     * allowance mechanism. `value` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+}
+
+
+// File: @openzeppelin/contracts/utils/Context.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.1) (utils/Context.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Provides information about the current execution context, including the
+ * sender of the transaction and its data. While these are generally available
+ * via msg.sender and msg.data, they should not be accessed in such a direct
+ * manner, since when dealing with meta-transactions the account sending and
+ * paying for execution may not be the actual sender (as far as an application
+ * is concerned).
+ *
+ * This contract is only required for intermediate, library-like contracts.
+ */
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+
+    function _contextSuffixLength() internal view virtual returns (uint256) {
+        return 0;
+    }
+}
+
+
+// File: contracts/LaunchPadV3.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+interface IStake {
+    struct UserData {
+        uint256 staked;
+        uint256 userXp;
+        uint32 unlockDate;
+        uint8 stakingLockIndex;
+        bool coolDownInited;
+    }
+
+    function rewardUserWithXpForSaleParticipation(address _user) external returns(bool);
+}
+
+interface IProxyStaking{
+    function getUserDataForRegisterToPool(
+        address _user
+    ) external view returns (uint256 totalXp, uint256 level);
+}
+
+interface IKyc {
+    function getUserKycStatus(address _user) external view returns(bool);
+}
+
+// Launchpad contract is connected to Stake contract
+// Staker can register to a sale if he stake and is KYC
+// KYC is done manualy by the team
+// when a pool is created stakers can register to the pool, his staking, level, lock period is checked and give him a weight in the pool
+// allocs are calculated individualy on prorata user weigh / total pool weight
+// the pool has a first round with garanty allocation, then a second round FCFS
+// When a user invested in pool and the pool is finished, he can ask refund for a period
+// If he want to claim his token, he has to renounce refund, then for claiming the smart contract will create a message who will be signed by project's private key
+// This message will be send to TokenDistribution conbtract for initing the vesting distribution
+// offchain private key is used because project will launch multichain project
+contract LaunchPadV3 is Ownable {
+    IERC20 public immutable STABLE;
+    IStake public immutable STAKINGCONTRACT;
+    IKyc public immutable KYC;
+    IProxyStaking public immutable PROXYSTAKING;
+
+    address public fundWallet;
+    uint256 public fcfsMultiplicator = 10; 
+
+    uint256 public constant PRECISION = 100_000_000_000;
+
+    uint256 public constant REGISTRATION_DELAY = 1800; // Users can register to a pool till 30 minutes before its begining
+    uint256 public refundDelay = 2 * 1 days;
+    uint256 public firstRoundDuration = 86400;
+
+    uint256 constant XP_REWARD_DURATION = 3600; // 1h
+
+    uint256 public currentPoolId = 30;
+
+    mapping(address => bool) public isAdmin;
+
+    struct PoolData {
+        uint256 amountTarget;
+        uint256 amountRaised;
+        uint256 maxFixedAlloc;
+        uint256 minLevelForParticipation;
+        uint256 stakeWeightForPool;
+        uint256 allocPerXpPoint;
+        uint256 startingDate;
+        uint256 limitDateRegistration;
+        uint256 refundOptionEnd;
+        bool isRefundable;
+        bool isFinished;
+        bool fundWithdrawn;
+        bool isAirdrop;
+        string poolName;
+    }
+
+    mapping(uint256 => PoolData) private _poolDatas;
+
+    struct UserDatasForPool{
+        uint256 userWeight;
+        uint256 userAllocRound1;
+        uint256 userAllocFcfs;
+        uint256 userInvest;
+        bool renounceRefund; 
+    }
+
+    mapping(address => mapping(uint256 => UserDatasForPool)) private _userDatasForPool;
+
+    event PoolCreated(
+        string indexed poolName,
+        uint256 indexed poolId,
+        uint256 amountTarget,
+        uint256 startingDate
+    );
+
+    event AdminUpdate(address user, bool isAdmin);
+
+    constructor(
+        IERC20 _stable, 
+        IStake _stakingContract, 
+        IKyc _ikyc, 
+        address _fundWallet, 
+        IProxyStaking _proxyStaking
+        ) Ownable(msg.sender){
+            STABLE = _stable;
+            STAKINGCONTRACT = _stakingContract;
+            KYC =_ikyc;
+            fundWallet = _fundWallet;
+            PROXYSTAKING = _proxyStaking;
+    }
+
+    modifier onlyAdmin() {
+        require(isAdmin[_msgSender()] || _msgSender() == owner(),"Only owner or Admin");
+        _;
+    }
+
+    function setAdmin(address _user, bool _isAdmin) external onlyOwner(){
+        isAdmin[_user] = _isAdmin;
+        emit AdminUpdate(_user, _isAdmin);
+    }
+
+    function setRefundDelay(uint256 _newRefundDelay) external onlyAdmin{
+        refundDelay =_newRefundDelay;
+    }
+
+    function setFcfsMultiplicator(uint256 _fcfsMultiplicator) external onlyAdmin{
+        fcfsMultiplicator =_fcfsMultiplicator;
+    }
+
+    function setRoundDuration(uint256 _firstRoundDuration) external onlyAdmin{
+        firstRoundDuration = _firstRoundDuration;
+    }
+
+    function closePool(uint256 _poolId) external onlyAdmin{
+        PoolData storage p = _poolDatas[_poolId];
+        require(p.startingDate != 0, "Pool doesn't exist");
+        p.isFinished = true;
+    }
+
+    function getPoolDatas(uint256 _poolId) external view returns(PoolData memory){
+        return _poolDatas[_poolId];
+    }
+
+    function getUserDatasForPool( address _user,uint256 _poolId) external view returns(UserDatasForPool memory u){
+        u = _userDatasForPool[_user][_poolId];
+        u.renounceRefund = _getUserRevokeRefundForPool(_user, _poolId);
+        if(u.userInvest != 0){
+            return u;
+        }else{
+            PoolData memory p = _poolDatas[_poolId];
+            if(u.userWeight != 0){
+                uint256 _alloc = _calculateUserAlloc(u.userWeight,p.allocPerXpPoint);
+                u.userAllocRound1 = _alloc;
+                u.userAllocFcfs = _alloc * fcfsMultiplicator;
+            }else{
+                (uint256 _xp,) = PROXYSTAKING.getUserDataForRegisterToPool(_user);
+                uint256 _alloc = _calculateUserAlloc(_xp,p.allocPerXpPoint);
+                u.userAllocFcfs = _alloc * fcfsMultiplicator;
+            }
+            if(p.maxFixedAlloc != 0){
+                u.userAllocFcfs = 0;
+            }
+            return u;
+        }
+    }
+
+    function _getUserRevokeRefundForPool(
+        address _user,
+        uint256 _pool
+    ) internal view returns (bool) {
+        if(!_poolDatas[_pool].isRefundable){
+            return true;
+        }
+        uint256 _refundEndDate = _poolDatas[_pool].refundOptionEnd;
+        if(_refundEndDate == 0){
+            return false;
+        }else if(block.timestamp <= _refundEndDate){
+            return _userDatasForPool[_user][_pool].renounceRefund;
+        }else if(_userDatasForPool[_user][_pool].userInvest != 0){
+            return true;    
+        }else {
+            return false;
+        }
+    }
+
+    function createPool(
+        string memory _poolName,
+        uint256 _amountTarget,
+        uint256 _maxFixedAlloc,
+        uint256 _startingDate,
+        bool _isRefundable,
+        bool _isAirdrop,
+        uint256 _minLevelForParticipation
+    ) external onlyAdmin {
+        require(_startingDate > block.timestamp, "Can't retro create pool");
+        require(_amountTarget > 1 * 1E18, "Decimals error");
+        currentPoolId++;
+        uint256 _currentPoolId = currentPoolId;
+        _poolDatas[_currentPoolId].amountTarget = _amountTarget;
+        _poolDatas[_currentPoolId].maxFixedAlloc = _maxFixedAlloc;
+        _poolDatas[_currentPoolId].minLevelForParticipation = _minLevelForParticipation;
+
+        _poolDatas[_currentPoolId].startingDate = _startingDate;
+
+        _poolDatas[_currentPoolId].limitDateRegistration = _startingDate - REGISTRATION_DELAY;
+
+        _poolDatas[_currentPoolId].poolName = _poolName;
+        _poolDatas[_currentPoolId].isRefundable = _isRefundable;
+        _poolDatas[_currentPoolId].isAirdrop = _isAirdrop;
+
+        emit PoolCreated(_poolName, currentPoolId, _amountTarget, _startingDate);
+    }
+
+    function setTgeForPool(uint256 _poolId,uint256 _tge) external onlyAdmin{
+        _poolDatas[_poolId].refundOptionEnd = _tge + refundDelay;
+    }
+
+    function _calculateUserAlloc(uint256 userWeight,uint256 allocPerXpPoint) internal pure returns(uint256 alloc){
+        return userWeight *  allocPerXpPoint / PRECISION;
+    }
+
+    function registerToPool(uint256 _poolId) external {
+        address _user = _msgSender();
+        require(KYC.getUserKycStatus(_user),"Need to KYC to participate");
+        require(_poolDatas[_poolId].limitDateRegistration >= block.timestamp, "Too late for registration");
+        require(_userDatasForPool[_user][_poolId].userWeight == 0, 'Already Registered');
+
+        (uint256 _xp,uint256 _level) = PROXYSTAKING.getUserDataForRegisterToPool(_user);
+        require(_xp != 0 ,"Not a staker OR in cooldown");
+        require(_level >= _poolDatas[_poolId].minLevelForParticipation,"User doesn't reach minimum level requirement");
+
+        _poolDatas[_poolId].stakeWeightForPool += _xp;
+        _poolDatas[_poolId].allocPerXpPoint =  (_poolDatas[_poolId].amountTarget * PRECISION) / _poolDatas[_poolId].stakeWeightForPool;
+        
+        _userDatasForPool[_user][_poolId].userWeight = _xp; 
+    }
+
+    function investInPoolRound1(uint256 _poolId, uint256 _amount) external {
+        require(_amount != 0, "Amount can't be Zero");
+        PoolData memory p = _poolDatas[_poolId];
+        uint256 _now = block.timestamp;
+
+        // check if pool has began
+        require(p.startingDate != 0, "Pool doesn't exist");
+        require(_now >= p.startingDate, "Pool isn't opened");
+        require(_now <= p.startingDate + firstRoundDuration, "Round1 is finished");
+        // check if pool is finished
+        require(!p.isFinished, "Pool already finished");
+        address _sender = _msgSender();
+        uint256 _userWeight = _userDatasForPool[_sender][_poolId].userWeight;
+
+        require(_userWeight != 0, "You are not register for that pool");
+        if(_userDatasForPool[_sender][_poolId].userAllocRound1 == 0 && _userDatasForPool[_sender][_poolId].userInvest == 0){
+            if(p.maxFixedAlloc != 0){
+                _userDatasForPool[_sender][_poolId].userAllocRound1 = p.maxFixedAlloc;
+            }else{
+                uint256 _userAlloc = _calculateUserAlloc(_userWeight,p.allocPerXpPoint);
+
+                _userDatasForPool[_sender][_poolId].userAllocRound1 = _userAlloc;
+                _userDatasForPool[_sender][_poolId].userAllocFcfs = _userAlloc * fcfsMultiplicator; 
+            }
+           if(_now <= p.startingDate + XP_REWARD_DURATION){
+                // if user participate to first hour of sale, reward him with xp
+                require(STAKINGCONTRACT.rewardUserWithXpForSaleParticipation(_sender), "Issue in Xp reward");
+           }
+        }
+
+        require(_userDatasForPool[_sender][_poolId].userAllocRound1 >= _amount, "Trying to invest too much");
+        _userDatasForPool[_sender][_poolId].userAllocRound1 -= _amount;
+
+        // check if pool target reached
+        require(p.amountRaised + _amount <= p.amountTarget, "too much, reduce the amount");
+        //increase amount raised in the pool
+        _poolDatas[_poolId].amountRaised += _amount;
+
+
+        // increase user investment in the pool
+        _userDatasForPool[_sender][_poolId].userInvest += _amount;
+
+
+        if(p.amountRaised + _amount == p.amountTarget){
+            // if amount target is reached close the pool 
+            _poolDatas[_poolId].isFinished = true;
+        }
+ 
+        require(STABLE.transferFrom(_sender, address(this), _amount),"Transfer failed");
+
+    }
+
+    function investInPoolFcfs(uint256 _poolId, uint256 _amount) external {
+        address _sender = _msgSender();
+        require(KYC.getUserKycStatus(_sender),"Need to KYC to participate");
+        require(_amount != 0, "Amount can't be Zero");
+        
+        PoolData memory p = _poolDatas[_poolId];
+        require(p.maxFixedAlloc == 0,"This pool doesn't have FCFS");
+
+        require(block.timestamp >p.startingDate+firstRoundDuration,"Fcfs didn't start");
+        require(!p.isFinished,"Pool is finished");
+        require(p.amountRaised + _amount <= p.amountTarget,"Reduce amount");
+
+        if(_userDatasForPool[_sender][_poolId].userInvest == 0){
+            (uint256 _xp,uint256 _level) = PROXYSTAKING.getUserDataForRegisterToPool(_sender);
+            require(_xp != 0 ,"Not staker OR Cooldown");
+            require(_level >= p.minLevelForParticipation,"Minimum level not reached");
+
+            _userDatasForPool[_sender][_poolId].userAllocFcfs = _calculateUserAlloc(_xp,p.allocPerXpPoint) * fcfsMultiplicator;
+        }
+        require(_userDatasForPool[_sender][_poolId].userAllocFcfs >= _amount, "You don't have enough FCFS alloc");
+
+        _userDatasForPool[_sender][_poolId].userAllocFcfs -=_amount;
+        _userDatasForPool[_sender][_poolId].userInvest +=_amount;
+        _poolDatas[_poolId].amountRaised +=_amount;
+
+        if(p.amountRaised + _amount == p.amountTarget){
+            // if amount target is reached close the pool 
+            _poolDatas[_poolId].isFinished = true;
+        }
+
+        require(STABLE.transferFrom(_sender, address(this), _amount),"Transfer failed");
+
+    }
+
+    function askRefund(uint256 _poolId) external {
+        require(!_poolDatas[_poolId].isAirdrop, "This pool is an airdrop pool, process for refund is different");
+        require(_poolDatas[_poolId].isRefundable, "This pool is not refundable");
+
+        address _sender =_msgSender();
+        uint256 _amountInvested = _userDatasForPool[_sender][_poolId].userInvest;
+        require(_amountInvested != 0, "you didn't invest in this pool");
+        _userDatasForPool[_sender][_poolId].userInvest = 0;
+        require(_poolDatas[_poolId].isFinished, "Pool need to be finished to ask refund");
+        require(!_userDatasForPool[_sender][_poolId].renounceRefund,"You already renounced to refund");
+
+        uint256 _refundOptionEnd = _poolDatas[_poolId].refundOptionEnd;
+        require( _refundOptionEnd!=0, "TGE not set");
+        require(block.timestamp < _refundOptionEnd, "Refund delay passed");
+        
+        _poolDatas[_poolId].amountRaised -= _amountInvested;
+        require(STABLE.transfer(
+            _sender,
+            _amountInvested
+        ),"Issue in transfer");
+    }
+
+    function revokeRefund(uint256 _poolId) external {
+        address _sender =_msgSender();
+        require(_userDatasForPool[_sender][_poolId].userInvest != 0, "you didn't invest in this pool");
+        require(_poolDatas[_poolId].isFinished, "Revoke only available after pool end");
+        require(!_userDatasForPool[_sender][_poolId].renounceRefund, "Revoke already done for this pool");
+
+        _userDatasForPool[_sender][_poolId].renounceRefund = true;
+        
+    }
+
+    function getRefundMessageToSign(address _user, uint256 _poolId) external view returns(bytes32){
+        if(_getUserRevokeRefundForPool(_user, _poolId)){
+            return keccak256(abi.encodePacked(_user,' renounced refund for poolId: ',_poolId));
+        }else{
+            return keccak256(abi.encodePacked(_user,' did not renounced refund for poolId: ',_poolId));
+        }
+    }
+
+    function withdrawPoolFund(uint256 _poolId) external onlyAdmin {
+        PoolData storage p = _poolDatas[_poolId];
+        require(!p.fundWithdrawn, "funds already withdrawn");
+        require(p.isFinished, "pool isn't finished yet");
+
+        if(p.isRefundable && !p.isAirdrop){
+            require(p.refundOptionEnd != 0, "TGE not set");
+            require(block.timestamp >= p.refundOptionEnd, "Refund delay not passed");
+        }
+
+        p.fundWithdrawn = true;
+
+        require(STABLE.transfer(
+            fundWallet,
+            p.amountRaised
+        ),"Issue in transfer");
+    }
+
+    function emergencyWithdraw(IERC20 _token, uint256 _amount) external onlyOwner {
+        require(_token.transfer(
+            fundWallet,
+            _amount != 0 ? _amount : _token.balanceOf(address(this))
+        ),"Issue in transfer");
+    }
+
+}

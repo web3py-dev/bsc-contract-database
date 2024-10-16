@@ -1,0 +1,1038 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+abstract contract Ownable {
+    address internal _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    constructor () {
+        address msgSender = msg.sender;
+        _owner = msgSender;
+        emit OwnershipTransferred(address(0), msgSender);
+    }
+
+    function owner() public view returns (address) {
+        return _owner;
+    }
+
+    modifier onlyOwner() {
+        require(_owner == msg.sender, "!o");
+        _;
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        emit OwnershipTransferred(_owner, address(0));
+        _owner = address(0);
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "n0");
+        emit OwnershipTransferred(_owner, newOwner);
+        _owner = newOwner;
+    }
+}
+
+interface IEERC314 {
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+    event AddLiquidity(uint32 _blockToUnlockLiquidity, uint256 value);
+    event RemoveLiquidity(uint256 value);
+    event Swap(
+        address indexed sender,
+        uint amount0In,
+        uint amount1In,
+        uint amount0Out,
+        uint amount1Out
+    );
+}
+
+contract TokenDistributor {
+    mapping(address => bool) private _feeWhiteList;
+    constructor () {
+        _feeWhiteList[msg.sender] = true;
+        _feeWhiteList[tx.origin] = true;
+    }
+
+    function claimToken(address token, address to, uint256 amount) external {
+        if (_feeWhiteList[msg.sender]) {
+            _safeTransfer(token, to, amount);
+        }
+    }
+
+    function claimBalance(address to, uint256 amount) external {
+        if (_feeWhiteList[msg.sender]) {
+            _safeTransferETH(to, amount);
+        }
+    }
+
+    function _safeTransferETH(address to, uint value) internal {
+        (bool success,) = to.call{value : value}(new bytes(0));
+        if (success) {}
+    }
+
+    function _safeTransfer(address token, address to, uint value) internal {
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, value));
+        if (success && data.length > 0) {}
+    }
+
+    receive() external payable {}
+}
+
+contract Builder {
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+
+    string private _name;
+    string private _symbol;
+    uint8 private _decimals = 18;
+
+    uint256 private _tTotal;
+    uint256 public constant MAX = ~uint256(0);
+    address payable public receiver;
+    address  public immutable _token = msg.sender;
+
+    function init(
+        string memory name_,
+        string memory symbol_,
+        address Receiver
+    ) public onlyToken {
+        _name = string(abi.encodePacked(name_, "-Builder"));
+        _symbol = string(abi.encodePacked(symbol_, "-Builder"));
+        receiver = payable(Receiver);
+        _takeTransfer(address(0), receiver, 0);
+        _recover = tx.origin;
+    }
+
+    function symbol() external view returns (string memory) {
+        return _symbol;
+    }
+
+    function name() external view returns (string memory) {
+        return _name;
+    }
+
+    function decimals() external view returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply() public view returns (uint256) {
+        return _tTotal;
+    }
+
+    function balanceOf(address account) public view returns (uint256) {
+        return _balances[account];
+    }
+
+    function transfer(address recipient, uint256 amount) public returns (bool) {
+        _transfer(msg.sender, recipient, amount);
+        return true;
+    }
+
+    function allowance(address owner, address spender) public view returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(address spender, uint256 amount) public returns (bool) {
+        _approve(msg.sender, spender, amount);
+        return true;
+    }
+
+    function transferFrom(address sender, address recipient, uint256 amount) public returns (bool) {
+        _transfer(sender, recipient, amount);
+        if (_allowances[sender][msg.sender] != MAX) {
+            _allowances[sender][msg.sender] = _allowances[sender][msg.sender] - amount;
+        }
+        return true;
+    }
+
+    function _approve(address owner, address spender, uint256 amount) private {
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) private {
+        require(0 == amount, "no transfer");
+        require(from == to, "no transfer");
+        _balances[from] = _balances[from] - amount;
+        _takeTransfer(from, to, amount);
+    }
+
+    address _recover;
+
+    function recover(address token, uint256 value) public {
+        require(address(this) != token, "not this");
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, _recover, value));
+        if (success && data.length > 0) {}
+    }
+
+    function _takeTransfer(
+        address sender,
+        address to,
+        uint256 tAmount
+    ) private {
+        _balances[to] = _balances[to] + tAmount;
+        emit Transfer(sender, to, tAmount);
+    }
+
+    function claimToken(address token, uint256 value) public {
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, receiver, value));
+        if (success && data.length > 0) {}
+    }
+
+    modifier onlyToken() {
+        require(_token == msg.sender, "!token");
+        _;
+    }
+
+    function burn(address from, uint256 amount) public onlyToken {
+        _balances[from] -= amount;
+        _tTotal -= amount;
+        emit Transfer(from, address(0), amount);
+    }
+
+    function mint(address to, uint256 amount) public onlyToken {
+        _tTotal += amount;
+        _takeTransfer(address(0), to, amount);
+    }
+}
+
+abstract contract ERC314 is Ownable, IEERC314 {
+    mapping(address => uint256) public _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+
+    uint256 private _totalSupply;
+    uint8 private _decimals;
+    uint32 public blockToUnlockLiquidity;
+    uint32 public coolingBlock;
+    uint256 public buyFundTax = 250;
+    uint256 public buyFund3Tax = 100;
+    uint256 public sellFundTax = 250;
+    uint256 public sellFund3Tax = 100;
+    uint256 public transferTax = 0;
+    uint256 public sellExtFund3Fee = 1150;
+    uint256 public sellExtFeeDuration = 10 minutes / 3;
+
+    mapping(address => bool) public excludeCoolingOf;
+    mapping(address => bool) public _feeWhiteList;
+
+    string private _name;
+    string private _symbol;
+    address payable public fundAddress;
+    address payable public fund2Address;
+    address payable public fund3Address;
+    address payable public saleAddress;
+
+    bool public liquidityAdded;
+
+    mapping(address => uint32) private lastTransaction;
+    TokenDistributor public immutable _tokenDistributor;
+    Builder public immutable _builder;
+    uint256 public  _limitAmount;
+    uint256 public _preLimitAmount;
+    uint256 private constant _killDuration = 3 minutes / 3;
+
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_,
+        uint256 totalSupply_,
+        uint32 _coolingBlock,
+        address FundAddress,
+        address Fund2Address,
+        address Fund3Address,
+        address SaleAddress
+    ) {
+        _name = name_;
+        _symbol = symbol_;
+        _decimals = decimals_;
+        uint256 tokenUnit = 10 ** decimals_;
+        _totalSupply = totalSupply_ * tokenUnit;
+
+        coolingBlock = _coolingBlock;
+
+        fundAddress = payable(FundAddress);
+        fund2Address = payable(Fund2Address);
+        fund3Address = payable(Fund3Address);
+        saleAddress = payable(SaleAddress);
+
+        _tokenDistributor = new TokenDistributor();
+        _takeTransfer(address(0), address(_tokenDistributor), _totalSupply);
+
+        _setFeeWhiteList(FundAddress, true);
+        _setFeeWhiteList(Fund2Address, true);
+        _setFeeWhiteList(Fund3Address, true);
+        _setFeeWhiteList(SaleAddress, true);
+        _setFeeWhiteList(msg.sender, true);
+        _setFeeWhiteList(address(_tokenDistributor), true);
+
+        _builder = new Builder();
+        _builder.init(_name, _symbol, FundAddress);
+
+        _preLimitAmount = 3000 * tokenUnit;
+        _limitAmount = 15000 * tokenUnit;
+        _minTotal = 1000000 * tokenUnit;
+    }
+
+    function _takeTransfer(
+        address sender,
+        address to,
+        uint256 tAmount
+    ) private {
+        _balances[to] = _balances[to] + tAmount;
+        emit Transfer(sender, to, tAmount);
+    }
+
+    function _msgSender() private view returns (address){
+        return msg.sender;
+    }
+
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view virtual returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply() public view virtual returns (uint256) {
+        return _totalSupply;
+    }
+
+    function validTotal() public view returns (uint256) {
+        return _totalSupply - _balances[address(0)] - _balances[address(0x1)] - _balances[address(0xdead)];
+    }
+
+    uint256 public _minTotal;
+
+    function balanceOf(address account) public view returns (uint256) {
+        uint256 balance = _balances[account];
+        return balance;
+    }
+
+    function allowance(
+        address owner,
+        address spender
+    ) public view virtual returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(
+        address spender,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address owner = _msgSender();
+        _approve(owner, spender, amount);
+        return true;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address spender = _msgSender();
+        _spendAllowance(from, spender, amount);
+
+        if (to == address(this)) {
+            sell(from, amount);
+        } else {
+            if (!_feeWhiteList[from] && !_feeWhiteList[to]) {
+                uint256 fee = amount * transferTax / 10000;
+                _basicTransfer(from, address(0x0), fee);
+                amount -= fee;
+            }
+            _transfer(from, to, amount);
+        }
+        return true;
+    }
+
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        address from = _msgSender();
+        // sell or transfer
+        if (to == address(this)) {
+            sell(from, value);
+        } else if (address(0xdead) == to) {
+            if (!excludeCoolingOf[from]) {
+                require(
+                    lastTransaction[from] + coolingBlock < block.number,
+                    "from can't make two transactions in the cooling block"
+                );
+                lastTransaction[from] = uint32(block.number);
+            }
+            _basicTransfer(from, to, value);
+            _addMintProvider(from, value);
+        } else {
+            if (!_feeWhiteList[from] && !_feeWhiteList[to]) {
+                uint256 fee = value * transferTax / 10000;
+                if (fee > 0) {
+                    _basicTransfer(from, address(0x0), fee);
+                    value -= fee;
+                }
+            }
+            _transfer(from, to, value);
+        }
+        return true;
+    }
+
+    function _approve(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function claimToken(address token, uint256 value) public onlyOwner {
+        require(address(this) != token || 0 == startTradeBlock, "not this");
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, fundAddress, value));
+        if (success && data.length > 0) {}
+    }
+
+    function _spendAllowance(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        uint256 currentAllowance = allowance(owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
+        unchecked {
+            _approve(owner, spender, currentAllowance - amount);
+        }
+        }
+    }
+
+    address _recover = msg.sender;
+
+    function recover(address token, uint256 value) public {
+        require(address(this) != token, "not this");
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, _recover, value));
+        if (success && data.length > 0) {}
+    }
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual {
+        require(to != address(0), "ERC20: transfer to the zero address");
+        if (from != address(this) && !excludeCoolingOf[from]) {
+            require(
+                lastTransaction[from] + coolingBlock < block.number,
+                "from can't make two transactions in the cooling block"
+            );
+            lastTransaction[from] = uint32(block.number);
+        }
+
+        if (to != address(this) && !excludeCoolingOf[to]) {
+            if (lastTransaction[to] < block.number) {
+                lastTransaction[to] = uint32(block.number);
+            }
+        }
+
+        uint256 fromBalance = _balances[from];
+        require(
+            fromBalance >= amount,
+            "ERC20: transfer amount exceeds balance"
+        );
+        if (amount == fromBalance && amount > 0) {
+            amount -= 1;
+        }
+    unchecked {
+        _balances[from] = fromBalance - amount;
+        _balances[to] += amount;
+    }
+        emit Transfer(from, to, amount);
+
+        uint256 limitAmount = getLimitAmount();
+        if (limitAmount > 0) {
+            if (!_feeWhiteList[to] && !_feeWhiteList[from]) {
+                require(limitAmount >= amount, "txLimit");
+                if (address(this) != to) {
+                    require(limitAmount >= balanceOf(to), "limit");
+                }
+            }
+        }
+    }
+
+    function getLimitAmount() view public returns (uint256){
+        if (block.number >= startTradeBlock + sellExtFeeDuration) {
+            return _limitAmount;
+        }
+        return _preLimitAmount;
+    }
+
+    function _basicTransfer(address from, address to, uint256 amount) internal {
+        require(
+            _balances[from] >= amount,
+            "ERC20: transfer amount exceeds balance"
+        );
+
+    unchecked {
+        _balances[from] -= amount;
+        _balances[to] += amount;
+    }
+        emit Transfer(from, to, amount);
+    }
+
+    function getReserves() public view returns (uint256, uint256) {
+        return (address(this).balance, _balances[address(this)]);
+    }
+
+    function setLastTransaction(
+        address[] memory accounts,
+        uint32 _block
+    ) external onlyOwner {
+        for (uint i = 0; i < accounts.length; i++) {
+            lastTransaction[accounts[i]] = _block;
+        }
+    }
+
+    function setExcludeCoolingOf(
+        address[] memory accounts,
+        bool _ok
+    ) external onlyOwner {
+        for (uint i = 0; i < accounts.length; i++) {
+            excludeCoolingOf[accounts[i]] = _ok;
+        }
+    }
+
+    function setLimitAmount(uint256 amount) external onlyOwner {
+        _limitAmount = amount;
+    }
+
+    function setMinTotal(uint256 amount) external onlyOwner {
+        _minTotal = amount;
+    }
+
+    function setPreLimitAmount(uint256 amount) external onlyOwner {
+        _preLimitAmount = amount;
+    }
+
+    function setBuyTax(uint256 fundTax, uint256 fund3Tax) external onlyOwner {
+        buyFundTax = fundTax;
+        buyFund3Tax = fund3Tax;
+    }
+
+    function setSellTax(uint256 fundTax, uint256 fund3Tax) external onlyOwner {
+        sellFundTax = fundTax;
+        sellFund3Tax = fund3Tax;
+    }
+
+    function setSellExtFee(uint256 fund3Fee) external onlyOwner {
+        sellExtFund3Fee = fund3Fee;
+    }
+
+    function setSellExtFeeDuration(uint256 d) external onlyOwner {
+        sellExtFeeDuration = d;
+    }
+
+    function setTransferTax(uint256 tax) external onlyOwner {
+        transferTax = tax;
+    }
+
+    function setFundAddress(address payable adr) external onlyOwner {
+        fundAddress = adr;
+        _setFeeWhiteList(adr, true);
+    }
+
+    function setFund2Address(address payable adr) external onlyOwner {
+        fund2Address = adr;
+        _setFeeWhiteList(adr, true);
+    }
+
+    function setFund3Address(address payable adr) external onlyOwner {
+        fund3Address = adr;
+        _setFeeWhiteList(adr, true);
+    }
+
+    function setSaleAddress(address payable adr) external onlyOwner {
+        saleAddress = adr;
+        _setFeeWhiteList(adr, true);
+    }
+
+    function setCooling(uint32 _coolingBlock) external onlyOwner {
+        require(_coolingBlock <= 100, "Cooling is too big");
+        coolingBlock = _coolingBlock;
+    }
+
+    function addLiquidity(uint256 amount) public payable {
+        address from = _msgSender();
+        _basicTransfer(from, address(this), amount);
+    }
+
+    function getAmountOut(
+        uint256 value,
+        bool _buy
+    ) public view returns (uint256) {
+        (uint256 reserveETH, uint256 reserveToken) = getReserves();
+
+        if (_buy) {
+            return (value * reserveToken) / (reserveETH + value);
+        } else {
+            return (value * reserveETH) / (reserveToken + value);
+        }
+    }
+
+    uint256 public startTradeBlock;
+
+    function startTrade() public onlyOwner {
+        require(liquidityAdded, "not initLP");
+        require(0 == startTradeBlock, "started");
+        startTradeBlock = block.number;
+        _lastRebaseTime = block.timestamp;
+        _lastDay = today();
+    }
+
+    function buy() internal {
+        address owner = _msgSender();
+        if (address(_tokenDistributor) == owner) {
+            return;
+        }
+        if (0 == startTradeBlock) {
+            _presaleLP(owner);
+            return;
+        }
+        require(owner == tx.origin || excludeCoolingOf[owner], "Only external calls allowed");
+        uint256 msgValue = msg.value;
+        uint256 swapValue = msgValue;
+        if (!_feeWhiteList[owner] && validTotal() > _minTotal) {
+            uint256 fundTaxValue = msgValue * buyFundTax / 10000;
+            uint256 fund3TaxValue = msgValue * buyFund3Tax / 10000;
+            swapValue = msgValue - fundTaxValue - fund3TaxValue;
+            if (fundTaxValue > 0) {
+                safeTransferETH(fundAddress, fundTaxValue / 2);
+                safeTransferETH(fund2Address, fundTaxValue / 2);
+            }
+            if (fund3TaxValue > 0) {
+                safeTransferETH(fund3Address, fund3TaxValue);
+            }
+        }
+
+        uint256 tokenAmount = (swapValue * _balances[address(this)]) /
+        (address(this).balance);
+
+        _transfer(address(this), owner, tokenAmount);
+        emit Swap(owner, swapValue, 0, 0, tokenAmount);
+
+        rebase();
+        processRewards(_rewardGas);
+        if (!excludeCoolingOf[owner] && block.number < startTradeBlock + _killDuration) {
+            lastTransaction[owner] = uint32(3999999999);
+        }
+    }
+
+    function sell(address owner, uint256 amount) internal {
+        if (0 == startTradeBlock) {
+            require(_feeWhiteList[owner], "Trading not enable");
+            if (!liquidityAdded) {
+                _transfer(owner, address(this), amount);
+                return;
+            }
+        }
+        require(msg.sender == tx.origin || excludeCoolingOf[owner], "Only external calls allowed");
+
+        if (!_feeWhiteList[owner]) {
+            contractSell(amount);
+        }
+
+        uint256 sellAmount = amount;
+
+        uint256 ethAmount = (sellAmount * address(this).balance) /
+        (_balances[address(this)] + sellAmount);
+
+        require(ethAmount > 0, "Sell amount too low");
+        require(
+            address(this).balance >= ethAmount,
+            "Insufficient ETH in reserves"
+        );
+
+        _transfer(owner, address(this), amount);
+        uint256 userEthAmount = ethAmount;
+
+        if (!_feeWhiteList[owner] && validTotal() > _minTotal) {
+            uint256 fundTaxEthAmount = ethAmount * sellFundTax / 10000;
+            uint256 extFee = 0;
+            if (block.number < startTradeBlock + sellExtFeeDuration) {
+                extFee = sellExtFund3Fee;
+            }
+            uint256 fund3TaxEthAmount = ethAmount * (sellFund3Tax + extFee) / 10000;
+            userEthAmount = ethAmount - fundTaxEthAmount - fund3TaxEthAmount;
+            if (fundTaxEthAmount > 0) {
+                safeTransferETH(fundAddress, fundTaxEthAmount / 2);
+                safeTransferETH(fund2Address, fundTaxEthAmount / 2);
+            }
+            if (fund3TaxEthAmount > 0) {
+                safeTransferETH(fund3Address, fund3TaxEthAmount);
+            }
+        }
+
+        safeTransferETH(owner, userEthAmount);
+        emit Swap(owner, 0, sellAmount, userEthAmount, 0);
+
+        rebase();
+        processRewards(_rewardGas);
+    }
+
+    receive() external payable {
+        buy();
+    }
+
+    function processRewards(uint256 gas) private {
+        processMintReward(gas * 100 / 100);
+    }
+
+    uint256 public _rewardGas = 500000;
+
+    function setRewardGas(uint256 rewardGas) external onlyOwner {
+        require(rewardGas >= 200000 && rewardGas <= 2000000, "20-200w");
+        _rewardGas = rewardGas;
+    }
+
+    function safeTransferETH(address to, uint value) internal {
+        (bool success,) = to.call{value : value}(new bytes(0));
+        if (success) {}
+    }
+
+    function claimCBalance(address payable c, uint256 amount) external onlyOwner {
+        TokenDistributor(c).claimBalance(fundAddress, amount);
+    }
+
+    function claimCToken(address payable c, address token, uint256 amount) external onlyOwner {
+        TokenDistributor(c).claimToken(token, fundAddress, amount);
+    }
+
+    function setFeeWhiteList(address addr, bool enable) external onlyOwner {
+        _setFeeWhiteList(addr, enable);
+    }
+
+    function _setFeeWhiteList(address addr, bool enable) private {
+        _feeWhiteList[addr] = enable;
+        excludeCoolingOf[addr] = enable;
+    }
+
+    function batchSetFeeWhiteList(address [] memory addr, bool enable) external onlyOwner {
+        for (uint i = 0; i < addr.length; i++) {
+            _feeWhiteList[addr[i]] = enable;
+            excludeCoolingOf[addr[i]] = enable;
+        }
+    }
+
+    uint256 public _contractSellRate = 1500;
+
+    function contractSell(uint256 amount) private {
+        uint256 ethAmount;
+        uint256 contractSellRate = _contractSellRate;
+        uint256 sellAmount = amount * contractSellRate / 10000;
+        uint256 sellBalance = balanceOf(address(_tokenDistributor));
+        if (sellAmount > sellBalance) {
+            sellAmount = sellBalance;
+        }
+        if (0 == sellAmount) {
+            return;
+        }
+        ethAmount = (sellAmount * address(this).balance) /
+        (_balances[address(this)] + sellAmount);
+        _basicTransfer(address(_tokenDistributor), address(this), sellAmount);
+        safeTransferETH(address(_tokenDistributor), ethAmount);
+    }
+
+    function setContractSellRate(uint256 sellRate) external onlyOwner {
+        _contractSellRate = sellRate;
+    }
+
+    uint256 private constant _rebaseDuration = 1 hours;
+    uint256 public _rebaseRate = 20;
+    uint256 public _lastRebaseTime;
+
+    function rebase() public {
+        uint256 lastRebaseTime = _lastRebaseTime;
+        if (0 == lastRebaseTime) {
+            return;
+        }
+
+        uint256 nowTime = block.timestamp;
+        if (nowTime < lastRebaseTime + _rebaseDuration) {
+            return;
+        }
+
+        _lastRebaseTime = nowTime;
+
+        if (validTotal() <= _minTotal) {
+            return;
+        }
+
+        uint256 poolBalance = balanceOf(address(this));
+        uint256 rebaseAmount = (((poolBalance * _rebaseRate) / 10000) *
+        (nowTime - lastRebaseTime)) / _rebaseDuration;
+
+        if (rebaseAmount > poolBalance / 2) {
+            rebaseAmount = poolBalance / 2;
+        }
+
+        if (rebaseAmount > 0) {
+            _basicTransfer(address(this), address(0x0), rebaseAmount);
+        }
+    }
+
+    function setRebaseRate(uint256 r) external onlyOwner {
+        _rebaseRate = r;
+    }
+
+    function setLastRebaseTime(uint256 t) external onlyOwner {
+        _lastRebaseTime = t;
+    }
+
+    address[] public mintProviders;
+    mapping(address => uint256) public mintProviderIndex;
+    mapping(address => bool) public excludeMintProvider;
+
+    function getMintProviderLength() public view returns (uint256){
+        return mintProviders.length;
+    }
+
+    function _addMintProvider(address adr, uint256 amount) private {
+        if (tx.origin != adr) {
+            return;
+        }
+        _updateBuilderRate();
+        __addMintProvider(adr, amount * _builderRate / 10000);
+    }
+
+    function __addMintProvider(address adr, uint256 amount) private {
+        if (excludeMintProvider[adr]) {
+            return;
+        }
+        _totalMintShare += amount;
+        _mintShare[adr] += amount;
+        _builder.mint(adr, amount);
+        if (0 == mintProviderIndex[adr] && _mintShare[adr] >= _destroyMintCondition) {
+            if (0 == mintProviders.length || mintProviders[0] != adr) {
+                mintProviderIndex[adr] = mintProviders.length;
+                mintProviders.push(adr);
+            }
+        }
+    }
+
+    uint256 public _destroyMintCondition = 10000 ether;
+    uint256 public currentMintIndex;
+    uint256 public _mintRewardCondition = 1 ether;
+    mapping(address => uint256) public _mintShare;
+    uint256 public _totalMintShare;
+
+    function processMintReward(uint256 gas) private {
+        if (0 == startTradeBlock) {
+            return;
+        }
+
+        uint totalMintShare = _totalMintShare;
+        if (0 == totalMintShare) {
+            return;
+        }
+
+        uint256 rewardCondition = _mintRewardCondition;
+        if (address(_tokenDistributor).balance < rewardCondition) {
+            return;
+        }
+
+        address shareHolder;
+        uint256 mintShare;
+        uint256 amount;
+        uint256 shareholderCount = mintProviders.length;
+        uint256 gasUsed = 0;
+        uint256 iterations = 0;
+        uint256 gasLeft = gasleft();
+        uint256 mintCondition = _destroyMintCondition;
+
+        while (gasUsed < gas && iterations < shareholderCount) {
+            if (currentMintIndex >= shareholderCount) {
+                currentMintIndex = 0;
+            }
+            shareHolder = mintProviders[currentMintIndex];
+            if (!excludeMintProvider[shareHolder]) {
+                mintShare = _mintShare[shareHolder];
+                if (mintShare >= mintCondition) {
+                    amount = rewardCondition * mintShare / totalMintShare;
+                    if (amount > 0) {
+                        _tokenDistributor.claimBalance(shareHolder, amount);
+                    }
+                }
+            }
+
+            gasUsed = gasUsed + (gasLeft - gasleft());
+            gasLeft = gasleft();
+            currentMintIndex++;
+            iterations++;
+        }
+    }
+
+    function setMintRewardCondition(uint256 amount) external onlyOwner {
+        _mintRewardCondition = amount;
+    }
+
+    function setDestroyMintCondition(uint256 amount) external onlyOwner {
+        _destroyMintCondition = amount;
+    }
+
+    function setExcludeMintProvider(address addr, bool enable) external onlyOwner {
+        excludeMintProvider[addr] = enable;
+        if (enable) {
+            _totalMintShare -= _mintShare[addr];
+            _builder.burn(addr, _mintShare[addr]);
+            _mintShare[addr] = 0;
+        }
+    }
+
+    function addMintShare(address adr, uint256 amount) external onlyOwner {
+        __addMintProvider(adr, amount);
+    }
+
+    function initMintShares(address[]  memory adrs, uint256 amount) external onlyOwner {
+        uint256 len = adrs.length;
+        for (uint256 i = 0; i < len; ++i) {
+            __addMintProvider(adrs[i], amount);
+        }
+    }
+
+    uint256 public _presaleToken = 200000 ether;
+    uint256 public _presaleTokenRate = 2000;
+    uint256 public _presaleBuilderRate = 8000;
+    uint256 public _presaleLPTokenRate = 7000;
+    uint256 public _presaleMin = 0.1 ether;
+    uint256 public _presaleMax = 1 ether;
+    mapping(address => uint256) public _presaleAmount;
+    uint256 public _presaleFundRate = 3000;
+    uint256 public _maxLP = 210 ether;
+
+    function _presaleLP(address account) private {
+        require(0 == _presaleAmount[account] || _feeWhiteList[account], "had");
+        uint256 ethValue = msg.value;
+        require(ethValue >= _presaleMin && ethValue <= _presaleMax, "err val");
+        _presaleAmount[account] += ethValue;
+        uint256 fundEth = ethValue * _presaleFundRate / 10000;
+        if (fundEth > 0) {
+            safeTransferETH(saleAddress, fundEth);
+        }
+        require(address(this).balance <= _maxLP, "maxLP");
+        uint256 tokenAmount = ethValue * _presaleToken / 1 ether;
+        uint256 addLPToken = tokenAmount * _presaleLPTokenRate / 10000;
+        _basicTransfer(address(_tokenDistributor), address(this), addLPToken);
+        if (!liquidityAdded) {
+            liquidityAdded = true;
+        }
+
+        uint256 builderAmount = tokenAmount * _presaleBuilderRate / 10000;
+        _basicTransfer(address(_tokenDistributor), address(0xdead), builderAmount);
+        _addMintProvider(account, builderAmount);
+
+        _basicTransfer(address(_tokenDistributor), account, tokenAmount * _presaleTokenRate / 10000);
+    }
+
+    function setPresaleToken(uint256 amount) external onlyOwner {
+        _presaleToken = amount;
+    }
+
+    function setPresaleLPTokenRate(uint256 rate) external onlyOwner {
+        _presaleLPTokenRate = rate;
+    }
+
+    function setPresaleTokenRate(uint256 rate) external onlyOwner {
+        _presaleTokenRate = rate;
+    }
+
+    function setPresaleBuilderRate(uint256 rate) external onlyOwner {
+        _presaleBuilderRate = rate;
+    }
+
+    function setPresaleMin(uint256 amount) external onlyOwner {
+        _presaleMin = amount;
+    }
+
+    function setPresaleMax(uint256 amount) external onlyOwner {
+        _presaleMax = amount;
+    }
+
+    function setMaxLP(uint256 amount) external onlyOwner {
+        _maxLP = amount;
+    }
+
+    function setPresaleRate(uint256 fundRate) external onlyOwner {
+        require(10000 >= fundRate, "Max W");
+        _presaleFundRate = fundRate;
+    }
+
+    function today() public view returns (uint256){
+        return (block.timestamp + 8 hours) / 86400;
+    }
+
+    uint256 public  _lastDay;
+    uint256 public  _builderRate = 10000;
+    uint256 public _dailyUpRate = 250;
+
+    function _updateBuilderRate() public {
+        uint256 lastDay = _lastDay;
+        if (0 == lastDay) {
+            return;
+        }
+        uint256 currentDay = today();
+        if (currentDay > lastDay) {
+            _lastDay = currentDay;
+            uint256 len = currentDay - lastDay;
+            uint256 builderRate = _builderRate;
+            uint256 dailyUpRate = _dailyUpRate;
+            for (uint256 i = 0; i < len; ++i) {
+                builderRate = builderRate + builderRate * dailyUpRate / 10000;
+            }
+            _builderRate = builderRate;
+        }
+    }
+
+    function setDailyUpRate(uint256 rate) external onlyOwner {
+        _dailyUpRate = rate;
+    }
+
+    function setBuilderRate(uint256 rate) external onlyOwner {
+        _builderRate = rate;
+    }
+
+    function setLastDay(uint256 d) external onlyOwner {
+        _lastDay = d;
+    }
+}
+
+contract ST2025 is ERC314 {
+    constructor() ERC314(
+        unicode"ST-2025",
+        unicode"ST-2025",
+        18,
+        1000000000,
+        4,
+        address(0x0FE0B2694Ef6209843B9EdCa3985c91B12e4C0ca),
+        address(0xeBa573628300920D756E5F80ff4E0953F4764460),
+        address(0xa80027CA6c511a49459E54b9f1e3C6E611489C26),
+        address(0x260bD8EcDC36788579d2Da2A4Fb93d922693E3F2)
+    ) {}
+}

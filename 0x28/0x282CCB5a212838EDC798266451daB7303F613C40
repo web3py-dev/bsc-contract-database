@@ -1,0 +1,18 @@
+
+// File: contracts/src/mock/Clock.sol
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.18;
+
+contract Clock {
+    /// @notice Emit when user ClockIn.
+    /// @param user user address
+    /// @param data ClockIn data
+    event ClockIn(address user, string data);
+
+    /// @notice user clockIn
+    /// @param data clockIn data
+    function clockIn(string calldata data) external {
+        emit ClockIn(msg.sender, data);
+    }
+}
+

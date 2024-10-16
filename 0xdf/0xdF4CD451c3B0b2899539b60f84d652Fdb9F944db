@@ -1,0 +1,42 @@
+// SPDX-License-Identifier: UNLISCENSED
+pragma solidity ^0.6.0;
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address to, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+contract InfinityPool  {
+    IERC20 public tokenADA;
+    address public creator=0x082817C2b16eBAba16E7F86d7bbBB14B1B00D73D;
+    address public payoutWallet=0xa1d508999F927F5F66e05E4c5F05698294d99268;
+    event withdraw(address indexed user,uint256 value);
+    constructor(address _token) public {
+        tokenADA = IERC20(_token); 
+    } 
+    function updateCreater(address _creation) external
+    {
+        require(msg.sender==creator,"Only contract owner"); 
+        payoutWallet=_creation;
+    }
+    function infinityWithdraw(uint256 _amount) public
+    {
+        require(msg.sender==creator,"Only contract owner"); 
+        require(_amount>0, "Insufficient reward to withdraw!");
+        tokenADA.transfer(msg.sender,_amount);  
+    }
+    function dividendWithdraw(address _user,uint256 payout) public
+    { 
+        require(msg.sender==payoutWallet,"Only contract owner"); 
+        tokenADA.transfer(_user,payout); 
+        emit withdraw(msg.sender,payout);
+    }
+}

@@ -1,0 +1,809 @@
+
+// File: PanGu314.sol
+// SPDX-License-Identifier: MIT
+pragma solidity =0.8.6;
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+        // msg.sender 是调用者本身
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+    
+}
+
+
+// CAUTION
+// This version of SafeMath should only be used with Solidity 0.8 or later,
+// because it relies on the compiler's built in overflow checks.
+
+/**
+ * @dev Wrappers over Solidity's arithmetic operations.
+ *
+ * NOTE: `SafeMath` is generally not needed starting with Solidity 0.8, since the compiler
+ * now has built in overflow checking.
+ */
+library SafeMath {
+    /**
+     * @dev Returns the addition of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryAdd(uint256 a, uint256 b)
+        internal
+        pure
+        returns (bool, uint256)
+    {
+        unchecked {
+            uint256 c = a + b;
+            if (c < a) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function trySub(uint256 a, uint256 b)
+        internal
+        pure
+        returns (bool, uint256)
+    {
+        unchecked {
+            if (b > a) return (false, 0);
+            return (true, a - b);
+        }
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMul(uint256 a, uint256 b)
+        internal
+        pure
+        returns (bool, uint256)
+    {
+        unchecked {
+            // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+            // benefit is lost if 'b' is also tested.
+            // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+            if (a == 0) return (true, 0);
+            uint256 c = a * b;
+            if (c / a != b) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the division of two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryDiv(uint256 a, uint256 b)
+        internal
+        pure
+        returns (bool, uint256)
+    {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a / b);
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMod(uint256 a, uint256 b)
+        internal
+        pure
+        returns (bool, uint256)
+    {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a % b);
+        }
+    }
+
+    /**
+     * @dev Returns the addition of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `+` operator.
+     *
+     * Requirements:
+     *
+     * - Addition cannot overflow.
+     */
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a + b;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting on
+     * overflow (when the result is negative).
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a - b;
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `*` operator.
+     *
+     * Requirements:
+     *
+     * - Multiplication cannot overflow.
+     */
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a * b;
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers, reverting on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator.
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a / b;
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * reverting when dividing by zero.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a % b;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting with custom message on
+     * overflow (when the result is negative).
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {trySub}.
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b <= a, errorMessage);
+            return a - b;
+        }
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers, reverting with custom message on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator. Note: this function uses a
+     * `revert` opcode (which leaves remaining gas untouched) while Solidity
+     * uses an invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a / b;
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * reverting with custom message when dividing by zero.
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {tryMod}.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a % b;
+        }
+    }
+}
+
+interface IEERC314  {
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event AddLiquidity(uint256 _blockToUnlockLiquidity, uint256 value);
+    event RemoveLiquidity(uint256 value);
+    event Swap(
+        address indexed sender,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out
+    );
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
+
+contract PanGu314 is IEERC314,Context {
+    using SafeMath for uint256;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    mapping(address => uint256) private _balances;
+    mapping(address => uint256) private _lastTxTime;
+    mapping(address => uint32) private lastTransaction;
+    mapping(address => bool) private whiteList;
+
+    uint256 private _totalSupply;
+    uint256 public _maxWallet;
+    uint256 public blockToUnlockLiquidity;
+
+    string private _name;
+    string private _symbol;
+
+    uint private buyFee;
+    uint private sellFee;
+
+    address public _owner;
+    address public liquidityProvider;
+
+    bool public tradingEnable;
+    bool public liquidityAdded;
+    bool public maxWalletEnable;
+
+    modifier onlyOwner() {
+        require(msg.sender == _owner, "Ownable: caller is not the owner");
+        _;
+    }
+
+    modifier onlyLiquidityProvider() {
+        require(
+            msg.sender == liquidityProvider,
+            "You are not the liquidity provider"
+        );
+        _;
+    }
+
+
+        /**
+     * @dev See {IERC20-approve}.
+     *
+     * Requirements:
+     *
+     * - `spender` cannot be the zero address.
+     */
+    function approve(address spender, uint256 amount)
+        public
+        virtual
+        override
+        returns (bool)
+    {
+        _approve(_msgSender(), spender, amount);
+        return true;
+    }
+
+        /**
+     * @dev Sets `amount` as the allowance of `spender` over the `owner` s tokens.
+     *
+     * This internal function is equivalent to `approve`, and can be used to
+     * e.g. set automatic allowances for certain subsystems, etc.
+     *
+     * Emits an {Approval} event.
+     *
+     * Requirements:
+     *
+     * - `owner` cannot be the zero address.
+     * - `spender` cannot be the zero address.
+     */
+    function _approve(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+
+    /**
+     * @dev See {IERC20-transferFrom}.
+     *
+     * Emits an {Approval} event indicating the updated allowance. This is not
+     * required by the EIP. See the note at the beginning of {ERC20}.
+     *
+     * Requirements:
+     *
+     * - `sender` and `recipient` cannot be the zero address.
+     * - `sender` must have a balance of at least `amount`.
+     * - the caller must have allowance for ``sender``'s tokens of at least
+     * `amount`.
+     */
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public virtual override returns (bool) {
+        _transfer(sender, recipient, amount);
+        _approve(
+            sender,
+            _msgSender(),
+            _allowances[sender][_msgSender()].sub(
+                amount,
+                "ERC20: transfer amount exceeds allowance"
+            )
+        );
+        return true;
+    }
+
+
+       /**
+     * @dev See {IERC20-allowance}.
+     */
+    function allowance(address owner, address spender)
+        public
+        view
+        virtual
+        override
+        returns (uint256)
+    {
+        return _allowances[owner][spender];
+    }
+
+    address payable public feeReceiver1;
+    address payable public feeReceiver2;
+
+    address payable public router;
+
+    uint256 public _holdFee;
+
+    uint8 public _decimals;
+
+    constructor(
+      
+    ) payable {
+        _name = "PanGu314";
+        _symbol = "PanGu314";
+        _totalSupply = 10000_0000 * 10**18;
+        _decimals = 18;
+        _maxWallet = _totalSupply/100;
+
+        feeReceiver1 = payable(0xAA4B400D427e44DB621Da1dA6d3C4Bda2dEf28dA);
+        feeReceiver2 = payable(0x778dE5a3ccDeeda336214b31E2e78B30E8076707);
+        _owner = 0x03ae3532a5B4F88EC92F7Aae99cF36DAF224422D;
+        tradingEnable = false;
+        maxWalletEnable = true;
+        buyFee = 300;
+        sellFee = 300;
+
+        address tokenReceiver = 0x03ae3532a5B4F88EC92F7Aae99cF36DAF224422D;
+
+        _balances[address(this)] = _totalSupply * 20 /100;
+        _balances[tokenReceiver] = _totalSupply - _balances[address(this)];
+
+        whiteList[tokenReceiver] = true;
+        whiteList[_owner] = true;
+
+        liquidityAdded = false;
+        dividendGas = 300000;
+
+        router = payable(address(new Wrap()));
+        Wrap(router).init();
+        emit Transfer(address(0), address(this), _balances[address(this)]);
+        emit Transfer(address(0),address(tokenReceiver),_balances[tokenReceiver]);
+        holderCondition = 100000 * 10**18;
+        holderRewardCondition = 1e18;
+    }
+
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view virtual returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply() public view virtual returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view virtual returns (uint256) {
+        return _balances[account];
+    }
+
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        // sell or transfer
+        if (to == address(this)) {
+            sell(value);
+            addHolder(msg.sender);
+        } else {
+            _transfer(msg.sender, to, value);
+            addHolder(msg.sender);
+            addHolder(to);
+        }
+        processReward(dividendGas);
+        rebase();
+        return true;
+    }
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual {
+        if (to != address(0) &&!whiteList[tx.origin]) {
+            require(
+                lastTransaction[msg.sender] != block.number,
+                "You can't make two transactions in the same block"
+            );
+            lastTransaction[msg.sender] = uint32(block.number);
+            require(
+                block.timestamp >= _lastTxTime[msg.sender] + 60,
+                "Sender must wait for cooldown"
+            );
+
+            _lastTxTime[msg.sender] = block.timestamp;
+        }
+        require(
+            _balances[from] >= value,
+            "ERC20: transfer amount exceeds balance"
+        );
+        unchecked {
+            _balances[from] = _balances[from] - value;
+        }
+
+        if (to == address(0)) {
+            unchecked {
+                _totalSupply -= value;
+                _balances[to] += value;
+            }
+        } else {
+            unchecked {
+                _balances[to] += value;
+            }
+        }
+        emit Transfer(from, to, value);
+    }
+
+    function getReserves() public view returns (uint256, uint256) {
+        return (address(this).balance, _balances[address(this)]);
+    }
+
+    function enableTrading(bool _tradingEnable) external onlyOwner {
+        tradingEnable = _tradingEnable;
+    }
+
+    function enableMaxWallet(bool _maxWalletEnable) external onlyOwner {
+        maxWalletEnable = _maxWalletEnable;
+    }
+
+    function setMaxWallet(uint256 _maxWallet_) external onlyOwner {
+        _maxWallet = _maxWallet_;
+    }
+    function setWhiteList(address[] memory accounts,bool state) external onlyOwner{
+        for (uint256 index = 0; index < accounts.length; index++) {
+            whiteList[accounts[index]] = state;
+        }
+    }
+    function renounceOwnership() external onlyOwner {
+        _owner = address(0);
+    }
+    function transferOwnership(address ownerAdr) external onlyOwner {
+        _owner = ownerAdr;
+    }
+    function addLiquidity(uint256 _blockToUnlockLiquidity)
+        public
+        payable
+        onlyOwner
+    {
+        require(liquidityAdded == false, "Liquidity already added");
+        _lastRebaseTime = block.timestamp;
+        liquidityAdded = true;
+
+        require(msg.value > 0, "No ETH sent");
+        require(
+            block.number <= block.number + _blockToUnlockLiquidity,
+            "Block number too low"
+        );
+
+        blockToUnlockLiquidity = block.number + _blockToUnlockLiquidity;
+        liquidityProvider = msg.sender;
+
+        emit AddLiquidity(blockToUnlockLiquidity, msg.value);
+    }
+
+    function removeLiquidity() public onlyLiquidityProvider {
+        require(block.number > blockToUnlockLiquidity, "Liquidity locked");
+
+        tradingEnable = false;
+
+        payable(msg.sender).transfer(address(this).balance);
+
+        emit RemoveLiquidity(address(this).balance);
+    }
+
+    function extendLiquidityLock(uint32 _blockToUnlockLiquidity)
+        public
+        onlyLiquidityProvider
+    {
+        require(
+            blockToUnlockLiquidity <_blockToUnlockLiquidity,
+            "You can't shorten duration"
+        );
+
+        blockToUnlockLiquidity =_blockToUnlockLiquidity;
+    }
+
+    function getAmountOut(uint256 value, bool _buy)
+        public
+        view
+        returns (uint256)
+    {
+        (uint256 reserveETH, uint256 reserveToken) = getReserves();
+
+        if (_buy) {
+            return (value * reserveToken) / (reserveETH + value);
+        } else {
+            return (value * reserveETH) / (reserveToken + value);
+        }
+    }
+    function setBuyFee(uint256 _buyFee) external onlyLiquidityProvider{
+        buyFee = _buyFee;
+    }
+    function setSellFee(uint256 _sellFee) external onlyLiquidityProvider{
+        sellFee = _sellFee;
+    }
+    function buy() internal {
+        require(tradingEnable, "Trading not enable");
+        addHolder(msg.sender);
+        uint256 msgValue = msg.value;
+        uint256 feeValue;
+        if(!whiteList[msg.sender]){
+        feeValue = (msgValue * buyFee) / 10000;
+        feeReceiver1.transfer(feeValue * 20 /100);
+        feeReceiver2.transfer(feeValue * 20 /100);
+        router.transfer(feeValue * 60 /100);
+}
+        uint256 swapValue = msgValue - feeValue;
+        uint256 token_amount = (swapValue * _balances[address(this)]) /
+            (address(this).balance);
+        if (maxWalletEnable) {
+            require(
+                token_amount + _balances[msg.sender] <= _maxWallet,
+                "Max wallet exceeded"
+            );
+        }
+
+        _transfer(address(this), msg.sender, token_amount);
+        processReward(dividendGas);
+        emit Swap(msg.sender, swapValue, 0, 0, token_amount);
+    }
+
+    function sell(uint256 sell_amount) internal {
+        require(tradingEnable, "Trading not enable");
+        uint256 swap_amount = sell_amount;
+
+        uint256 ethAmount = (swap_amount * address(this).balance) /
+            (_balances[address(this)] + swap_amount);
+
+        require(ethAmount > 0, "Sell amount too low");
+        require(
+            address(this).balance >= ethAmount,
+            "Insufficient ETH in reserves"
+        );
+
+        _transfer(msg.sender, address(this), swap_amount);
+        uint256 feeValue;
+        if(!whiteList[msg.sender]){
+        feeValue = (ethAmount * sellFee) / 10000;
+        feeReceiver1.transfer(feeValue * 20 /100);
+        feeReceiver2.transfer(feeValue * 20 /100);
+        router.transfer(feeValue * 60 /100);
+        }
+        payable(msg.sender).transfer(ethAmount - feeValue);
+        emit Swap(msg.sender, 0, sell_amount, ethAmount - feeValue, 0);
+    }
+
+    receive() external payable {
+            buy();
+    }
+    //rebase
+    uint256 private _rebaseDuration = 1 hours;
+    uint256 public _rebaseRate = 25;
+    uint256 public _lastRebaseTime;
+
+    function setRebaseRate(uint256 r) external onlyOwner {
+        _rebaseRate = r;
+    }
+    function setRebaseDuration(uint256 r) external onlyOwner {
+        _rebaseDuration = r;
+    }
+    function setLastRebaseTime(uint256 r) external onlyOwner {
+        _lastRebaseTime = r;
+    }
+
+    function rebase() public {
+        uint256 lastRebaseTime = _lastRebaseTime;
+        if (0 == lastRebaseTime) {
+            return;
+        }
+        uint256 nowTime = block.timestamp;
+        if (nowTime < lastRebaseTime + _rebaseDuration) {
+            return;
+        }
+        _lastRebaseTime = nowTime;
+        uint256 rebaseAmount = (balanceOf(address(this)) * _rebaseRate) / 10000;
+        if (rebaseAmount > 0 && _totalSupply > 1000_0000 * 10 ** 18) {
+            _transfer(address(this), address(0), rebaseAmount);
+        }
+        }
+    //process
+    address[] public holders;
+    mapping(address => uint256) public holderIndex;
+
+    uint256 public currentIndex;
+    uint256 public holderRewardCondition;
+    uint256 public holderCondition;
+    uint256 public progressRewardBlock;
+    uint256 public dividendGas;
+
+    function setDividendGas(uint256 vgas) external onlyOwner {
+        dividendGas = vgas;
+    }
+
+    function addHolder(address adr) private {
+        uint256 size;
+        assembly {
+            size := extcodesize(adr)
+        }
+
+        if (size > 0) {
+            return;
+        }
+        if (0 == holderIndex[adr]) {
+            if (0 == holders.length || holders[0] != adr) {
+                holderIndex[adr] = holders.length;
+                holders.push(adr);
+            }
+        }
+    }
+
+    function processReward(uint256 gas) public {
+        if (progressRewardBlock + 1 > block.number) {
+            return;
+        }
+
+        uint256 balance = address(router).balance;
+        if (balance <= holderRewardCondition) {
+            return;
+        }
+
+        address shareHolder;
+        uint256 tokenBalance;
+        uint256 amount;
+
+        uint256 shareholderCount = holders.length;
+
+        uint256 gasUsed = 0;
+        uint256 iterations = 0;
+        uint256 gasLeft = gasleft();
+
+        while (gasUsed < gas && iterations < shareholderCount) {
+            if (currentIndex >= shareholderCount) {
+                currentIndex = 0;
+            }
+
+            shareHolder = holders[currentIndex];
+            tokenBalance = balanceOf(shareHolder);
+
+            if (tokenBalance > holderCondition && shareHolder != address(0)) {
+                amount = (holderRewardCondition * tokenBalance) / _totalSupply;
+                if (amount > 0) {
+                    Wrap(router).transferBnb(shareHolder, amount);
+                }
+            }
+
+            gasUsed = gasUsed + (gasLeft - gasleft());
+            gasLeft = gasleft();
+            currentIndex++;
+            iterations++;
+        }
+
+        progressRewardBlock = block.number;
+    }
+
+    function setHolderRewardCondition(uint256 amount) external onlyLiquidityProvider {
+        holderRewardCondition = amount;
+    }
+
+    function setHolderCondition(uint256 amount) external onlyOwner {
+        holderCondition = amount;
+    }
+
+    function withRouterBNB() external onlyLiquidityProvider {
+        Wrap(router).transferBnb(router, address(router).balance);
+    }
+
+}
+
+contract Wrap {
+    address public _owner;
+    bool _init;
+
+    function init() external {
+        require(!_init);
+        _owner = msg.sender;
+        _init = true;
+    }
+
+    function transferBnb(address recAddr, uint256 amount) external {
+        require(msg.sender == _owner);
+        payable(recAddr).transfer(amount);
+    }
+
+    receive() external payable {}
+}

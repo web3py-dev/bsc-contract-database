@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
+
+// All tokens mined with this smart contract will be credited to its owner only
+
+interface IDecentralizedMarket {
+    function MiningBlock() external;  
+    function balanceOf(address owner) external view returns (uint);
+    function transfer(address to, uint value) external returns (bool);
+}   
+
+interface IPancakePair {
+    function balanceOf(address owner) external view returns (uint);
+    function transfer(address to, uint value) external returns (bool);
+}
+
+contract PrivateDemaMiner {
+    IDecentralizedMarket public decentralizedMarket;
+    IPancakePair public pancakepair;
+    address public Owner;
+
+    event Withdraw(address indexed to, uint256 amount);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    constructor(address _decentralizedMarketAddress, address _pancakepair) {
+        decentralizedMarket = IDecentralizedMarket(_decentralizedMarketAddress);
+        pancakepair = IPancakePair(_pancakepair);
+        Owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(Owner == msg.sender, "Ownable: caller is not the owner");
+        _;
+    }
+
+    function callMiningBlock() external {
+        decentralizedMarket.MiningBlock();
+    }
+
+    function updateERC20Token(IDecentralizedMarket _tokenContract) public onlyOwner {
+        decentralizedMarket = _tokenContract;
+    }
+
+    function updateLPToken(IPancakePair _tokenContract) public onlyOwner {
+        pancakepair = _tokenContract;
+    }
+
+    function transferOwnership(address _owneraddr) public onlyOwner {
+        require(_owneraddr != address(0), "Invalid address");
+        emit OwnershipTransferred(Owner, _owneraddr);
+        Owner = _owneraddr;
+    }
+
+    function withdrawAllDemaToken(address _to) public onlyOwner {
+        require(_to != address(0), "Invalid address");
+        uint256 amount = decentralizedMarket.balanceOf(address(this));
+        require(decentralizedMarket.transfer(_to, amount), "Transfer failed");
+        emit Withdraw(_to, amount);
+    }
+
+    function withdrawDemaToken(address _to, uint256 _amount) public onlyOwner {
+        require(_to != address(0), "Invalid address");
+        require(decentralizedMarket.transfer(_to, _amount), "Transfer failed");
+        emit Withdraw(_to, _amount);
+    }
+
+    function withdrawAllLPToken(address _to) public onlyOwner {
+        require(_to != address(0), "Invalid address");
+        uint256 amount = pancakepair.balanceOf(address(this));
+        require(pancakepair.transfer(_to, amount), "Transfer failed");
+        emit Withdraw(_to, amount);
+    }
+
+    function withdrawLPToken(address _to, uint256 _amount) public onlyOwner {
+        require(_to != address(0), "Invalid address");
+        require(pancakepair.transfer(_to, _amount), "Transfer failed");
+        emit Withdraw(_to, _amount);
+    }
+    
+    receive() external payable {}
+}

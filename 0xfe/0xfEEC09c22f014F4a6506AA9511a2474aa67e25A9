@@ -1,0 +1,262 @@
+
+// File: contracts/AIMAO.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+}
+
+abstract contract Ownable is Context {
+    address private _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    constructor() {
+        _transferOwnership(_msgSender());
+    }
+
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    function _checkOwner() internal view virtual {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+interface ISwapFactory {
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+
+    function feeTo() external view returns (address);
+}
+
+interface ISwapRouter {
+    function factory() external pure returns (address);
+
+    function WETH() external pure returns (address);
+}
+
+contract AIMAO is Context, Ownable {
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    uint256 private _totalSupply = 10 * (10 ** 8) * (10 ** 18);
+    string private _name = "AIMAO";
+    string private _symbol = "AIMAO";
+    address public marketAddress;
+    address public feeAddress;
+    address public liquidityAddress;
+    address public WETH = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+    address public swapRouter = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
+    uint256 public idoStartTime = block.timestamp;
+    uint256 public idoEndTime = block.timestamp + 24 * 60 * 60;
+    uint256 public idoPrice = 100 * 10 ** 4;
+    uint256 public marketFee = 2;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+
+    constructor(
+        address _swapRouter,
+        address _WETH,
+        address _marketAddress,
+        address _feeAddress,
+        address _liquidityAddress,
+        uint256 _idoStartTime,
+        uint256 _idoEndTime
+    ) {
+        if (_swapRouter != address(0)) {
+            swapRouter = _swapRouter;
+        }
+        if (_WETH != address(0)) {
+            WETH = _WETH;
+        }
+        ISwapFactory swapFactory = ISwapFactory(ISwapRouter(swapRouter).factory());
+        swapFactory.createPair(address(this), WETH);
+        marketAddress = _marketAddress;
+        feeAddress = _feeAddress;
+        liquidityAddress = _liquidityAddress;
+        if (_idoStartTime > 0) {
+            idoStartTime = _idoStartTime;
+        }
+        if (_idoEndTime > 0) {
+            idoEndTime = _idoEndTime;
+        }
+        uint256 _toIdo = _totalSupply * 5 / 100;
+        uint256 _left = _totalSupply - _toIdo;
+        _balances[address(this)] += _toIdo;
+        emit Transfer(address(0), address(this), _toIdo);
+        _balances[liquidityAddress] += _left;
+        emit Transfer(address(0), liquidityAddress, _left);
+    }
+
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view virtual returns (uint8) {
+        return 18;
+    }
+
+    function totalSupply() public view virtual returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view virtual returns (uint256) {
+        return _balances[account];
+    }
+
+    function allowance(
+        address owner,
+        address spender
+    ) public view virtual returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(
+        address spender,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address owner = _msgSender();
+        _approve(owner, spender, amount);
+        return true;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address spender = _msgSender();
+        _spendAllowance(from, spender, amount);
+        _transfer(from, to, amount);
+        return true;
+    }
+
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        _transfer(_msgSender(), to, value);
+        return true;
+    }
+
+    function _approve(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function _spendAllowance(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        uint256 currentAllowance = allowance(owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
+            unchecked {
+                _approve(owner, spender, currentAllowance - amount);
+            }
+        }
+    }
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual {
+        require(to != address(0), "ERC20: transfer to the zero address");
+        uint256 fromBalance = _balances[from];
+        require(
+            fromBalance >= amount,
+            "ERC20: transfer amount exceeds balance"
+        );
+        _balances[from] = fromBalance - amount;
+        require(_balances[from] > 0, "r001");
+        if (to == address(this) || from == address(this) || from == liquidityAddress || to == liquidityAddress || from == marketAddress || to == marketAddress) {
+            _balances[to] += amount;
+            emit Transfer(from, to, amount);
+        } else {
+            uint256 _fee = amount * marketFee / 100;
+            uint256 _amount = amount - _fee;
+            _balances[marketAddress] += _fee;
+            _balances[to] += _amount;
+            emit Transfer(from, marketAddress, _fee);
+            emit Transfer(from, to, _amount);
+        }
+    }
+
+    function buy() internal {
+        uint256 t = msg.value / 10 ** 17;
+        require(msg.value == t * 10 ** 17, "The transfer amount must be an integer multiple of 0.1 BNB");
+        require(_msgSender() == tx.origin, "Only external calls allowed");
+        address owner = _msgSender();
+        uint256 tokenAmount = msg.value * idoPrice;
+        _balances[owner] += tokenAmount;
+        _balances[address(this)] -= tokenAmount;
+        payable(feeAddress).transfer(msg.value);
+        emit Transfer(address(this), address(owner), tokenAmount);
+    }
+
+    function claimWToken() public onlyOwner {
+        uint256 tokenAmount = _balances[address(this)];
+        address owner = _msgSender();
+        _balances[owner] += tokenAmount;
+        _balances[address(this)] = 0;
+        emit Transfer(address(this), address(owner), tokenAmount);
+    }
+
+    function setTimeLine(uint256 _idoStartTime, uint256 _idoDuration) public onlyOwner {
+        idoStartTime = _idoStartTime;
+        idoEndTime = _idoStartTime + _idoDuration;
+    }
+
+    receive() external payable {
+        if (block.timestamp >= idoStartTime && block.timestamp <= idoEndTime) {
+            buy();
+        } else {
+            revert("Not during the IDO period");
+        }
+    }
+}
+

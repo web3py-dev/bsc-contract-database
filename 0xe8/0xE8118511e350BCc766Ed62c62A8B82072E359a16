@@ -1,0 +1,1047 @@
+
+// File: contracts/Context.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.1) (utils/Context.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Provides information about the current execution context, including the
+ * sender of the transaction and its data. While these are generally available
+ * via msg.sender and msg.data, they should not be accessed in such a direct
+ * manner, since when dealing with meta-transactions the account sending and
+ * paying for execution may not be the actual sender (as far as an application
+ * is concerned).
+ *
+ * This contract is only required for intermediate, library-like contracts.
+ */
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+
+    function _contextSuffixLength() internal view virtual returns (uint256) {
+        return 0;
+    }
+}
+
+
+// File: contracts/crowdsale.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "./Ownable.sol";
+import "./IERC20.sol";
+import "./Pausable.sol";
+import "./SafeMath.sol";
+
+interface StakeInterface {
+    function getLevel(address userAddress) external view returns (uint8);
+}
+
+contract Crowdsale is Ownable, Pausable {
+    StakeInterface stakeContract;
+    using SafeMath for uint256;
+
+    IERC20 public XPADToken;
+    IERC20 public USDToken;
+
+    address public USDRecipient;
+
+    uint256 public refZeroLevelInv;
+    uint256 public refFirstLevelInv;
+    uint256 public refSecondLevelInv;
+    uint256 public refThirdLevelInv;
+    uint256 public refZeroLevelRef;
+    uint256 public refFirstLevelRef;
+    uint256 public refSecondLevelRef;
+    uint256 public refThirdLevelRef;
+    bool public rewardStatus;
+    uint256 public procRefUSD;
+    uint256 public procRefUSDDiv;
+    uint256 public buyerBonusXPP;
+
+    struct UserReferalInfo {
+        uint256 rewardXPP;
+        uint256 rewardUSDC;
+        uint256 rewardXPPtotal;
+        uint256 rewardUSDCtotal;
+        uint256 refAmount;
+    }
+
+    address[] internal topXpp = new address[](3);
+    address[] internal topUsd = new address[](3);
+
+    mapping(address => bool) public blackList;
+    mapping(address => UserReferalInfo) public userReferalInfo;
+
+    struct Vesting {
+        uint256 startTimeVesting;
+        uint256 vestingDays;
+        uint256 value;
+        uint256 claimed;
+    }
+    struct Round {
+        uint256 vesting;
+        uint256 price;
+        uint256 priveDiv;
+        uint256 maxTotalAmount;
+    }
+
+    struct salesInfo {
+        bool pause;
+        uint256 minUSD;
+        uint256 totalSold;
+        address addressUSD;
+        Round[] allRounds;
+        mapping(address => Vesting[]) addressToS;
+    }
+    mapping(address => salesInfo) internal salesToken;
+    address[] public allSalesToken;
+
+    event saleEvent(address tokenAddress, uint256 totalSold);
+
+    constructor(
+        address _USDTokenAddress, 
+        address _XPADTokenAddress, 
+        address _USDRecipient, 
+        address stakeContractAddress
+    ) Ownable(msg.sender) Pausable() {
+        USDRecipient = _USDRecipient;
+        XPADToken = IERC20(_XPADTokenAddress);
+        USDToken = IERC20(_USDTokenAddress);
+
+        refZeroLevelInv = 0;
+        refFirstLevelInv = 100 ether;
+        refSecondLevelInv = 500 ether;
+        refThirdLevelInv = 2000 ether;
+        refZeroLevelRef = 0;
+        refFirstLevelRef = 100 ether;
+        refSecondLevelRef = 100 ether;
+        refThirdLevelRef = 100 ether;
+        procRefUSD = 15;
+        procRefUSDDiv = 100;
+        buyerBonusXPP = 100 ether;
+        stakeContract = StakeInterface(stakeContractAddress);
+        rewardStatus = true;
+
+        salesToken[_XPADTokenAddress].allRounds.push(Round(360, 9, 1000, 97_000_000 ether));
+        salesToken[_XPADTokenAddress].allRounds.push(Round(360, 2297, 100000, 38_000_000 ether));
+        salesToken[_XPADTokenAddress].allRounds.push(Round(270, 4972, 100000, 19_000_000 ether));
+        salesToken[_XPADTokenAddress].allRounds.push(Round(120, 12138, 100000, 19_000_000 ether));
+        salesToken[_XPADTokenAddress].minUSD = 10 ether;
+        salesToken[_XPADTokenAddress].pause = false;
+        salesToken[_XPADTokenAddress].addressUSD = _USDTokenAddress;
+        allSalesToken.push(_XPADTokenAddress);
+    }
+
+
+    function getSaleInfo(address _tokenAddress) public view returns (bool, uint256, uint256, address) {
+        return (salesToken[_tokenAddress].pause, salesToken[_tokenAddress].minUSD, salesToken[_tokenAddress].totalSold, salesToken[_tokenAddress].addressUSD);
+    }
+
+    function getRound(address _tokenAddress) public view returns (uint) {
+        uint256 _totalSoldRound = 0;
+        for (uint256 i = 0; i < salesToken[_tokenAddress].allRounds.length; i++) {
+            _totalSoldRound = _totalSoldRound.add(salesToken[_tokenAddress].allRounds[i].maxTotalAmount);
+            if (salesToken[_tokenAddress].totalSold < _totalSoldRound) {
+                return i;
+            }
+        }
+        return 0;
+    }
+
+    function getAllRounds(address _tokenAddress) public view returns (Round[] memory) {
+        return salesToken[_tokenAddress].allRounds;
+    }
+
+    function getAllVesting(address _tokenAddress) public view returns (Vesting[] memory) {
+        return salesToken[_tokenAddress].addressToS[msg.sender];
+    }
+
+    function getCurrentMaxTotalAmount(address _tokenAddress) internal view returns (uint) {
+        uint256 _totalSoldRound = 0;
+        for (uint256 i = 0; i < salesToken[_tokenAddress].allRounds.length; i++) {
+            _totalSoldRound = _totalSoldRound.add(salesToken[_tokenAddress].allRounds[i].maxTotalAmount);
+            if (salesToken[_tokenAddress].totalSold < _totalSoldRound) {
+                return _totalSoldRound;
+            }
+        }
+        return 0;
+    }
+
+    function sale(address _tokenAddress, uint256 amount, address _inviter) public whenNotPaused {  
+        require(salesToken[_tokenAddress].pause == false, "sale suspended");
+        uint256 amountUSD;
+        uint256 _round = getRound(_tokenAddress);
+        uint256 _maxAmount = getCurrentMaxTotalAmount(_tokenAddress) - salesToken[_tokenAddress].totalSold;
+
+        if (amount > _maxAmount) {
+            amount = _maxAmount;
+            amountUSD = amount.mul(salesToken[_tokenAddress].allRounds[_round].price).div(salesToken[_tokenAddress].allRounds[_round].priveDiv);
+        } else {
+            amountUSD = amount.mul(salesToken[_tokenAddress].allRounds[_round].price).div(salesToken[_tokenAddress].allRounds[_round].priveDiv);
+            require(amountUSD >= salesToken[_tokenAddress].minUSD, "The minimum purchase amount for the XPAD token");
+        }
+
+        salesToken[_tokenAddress].addressToS[msg.sender].push(Vesting(block.timestamp, salesToken[_tokenAddress].allRounds[_round].vesting, amount, 0));
+        salesToken[_tokenAddress].totalSold = salesToken[_tokenAddress].totalSold.add(amount);
+        
+        if (_inviter != address(0)) {
+            require(rewardStatus, "Reward status block");
+            uint256 refAmount = calculateReferralAmount(amountUSD, _inviter, _tokenAddress, msg.sender);
+            IERC20(salesToken[_tokenAddress].addressUSD).transferFrom(msg.sender, USDRecipient, amountUSD.sub(refAmount));
+            IERC20(salesToken[_tokenAddress].addressUSD).transferFrom(msg.sender, address(this), refAmount);
+        } else {
+            IERC20(salesToken[_tokenAddress].addressUSD).transferFrom(msg.sender, USDRecipient, amountUSD);
+        }
+        emit saleEvent(_tokenAddress, salesToken[_tokenAddress].totalSold);
+    }
+
+    function getLevelFromStakeContract(address userAddress, bool isReferral) public view returns (uint256) {
+        uint256 level = stakeContract.getLevel(userAddress);
+        if (level == 1) {
+            return isReferral ? refFirstLevelRef : refFirstLevelInv;
+        }
+        if (level == 2) {
+            return isReferral ? refSecondLevelRef : refSecondLevelInv;
+        }
+        if (level == 3) {
+            return isReferral ? refThirdLevelRef : refThirdLevelInv;
+        }
+        return isReferral ? refZeroLevelRef : refZeroLevelInv;
+    }
+
+    function calculateTopReferral(address _tokenAddress, address _userAddress) private {
+        uint currentIndex = 3;
+
+        if (_tokenAddress == address(XPADToken)) {
+            uint256 referrerBalance = userReferalInfo[_userAddress].rewardXPPtotal;
+            for (uint i = 0; i < 3; i++) {
+                if (topXpp[i] == _userAddress) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+            if (currentIndex == 3 && (referrerBalance <= userReferalInfo[topXpp[2]].rewardXPPtotal)) {
+                return;
+            }
+            if (currentIndex < 3) {
+                uint j = currentIndex;
+                for (j; j > 0 && referrerBalance > userReferalInfo[topXpp[j - 1]].rewardXPPtotal; j--) {
+                    topXpp[j] = topXpp[j - 1];
+                }
+                topXpp[j] = _userAddress;
+            } else {
+                for (uint i = 0; i < 3; i++) {
+                    if (topXpp[i] == address(0) || referrerBalance > userReferalInfo[topXpp[i]].rewardXPPtotal) {
+                        for (uint j = 3 - 1; j > i; j--) {
+                            topXpp[j] = topXpp[j - 1];
+                        }
+                        topXpp[i] = _userAddress;
+                        break;
+                    }
+                }
+            }
+        } else {
+            uint256 referrerBalance = userReferalInfo[_userAddress].rewardUSDCtotal;
+            for (uint i = 0; i < 3; i++) {
+                if (topUsd[i] == _userAddress) {
+                    currentIndex = i;
+                    break;
+                }
+            }
+            if (currentIndex == 3 && (referrerBalance <= userReferalInfo[topUsd[2]].rewardUSDCtotal)) {
+                return;
+            }
+            if (currentIndex < 3) {
+                uint j = currentIndex;
+                for (j; j > 0 && referrerBalance > userReferalInfo[topUsd[j - 1]].rewardUSDCtotal; j--) {
+                    topUsd[j] = topUsd[j - 1];
+                }
+                topUsd[j] = _userAddress;
+            } else {
+                for (uint i = 0; i < 3; i++) {
+                    if (topUsd[i] == address(0) || referrerBalance > userReferalInfo[topUsd[i]].rewardUSDCtotal) {
+                        for (uint j = 3 - 1; j > i; j--) {
+                            topUsd[j] = topUsd[j - 1];
+                        }
+                        topUsd[i] = _userAddress;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    function calculateReferralAmount(uint256 _amountUSD, address _inviter, address _tokenAddress, address _referal) internal returns (uint256) {
+        require(_inviter != _referal, "Referral and inviter should be different addresses");
+        require(!blackList[_inviter], "Inviter code is blacklisted");
+
+        uint256 inviterLevelBonus;
+        uint256 referralBonus;
+        if (_tokenAddress == address(XPADToken)) {
+            UserReferalInfo storage infoReferal = userReferalInfo[_referal];
+            infoReferal.rewardXPP = infoReferal.rewardXPP.add(buyerBonusXPP);
+            infoReferal.rewardXPPtotal = infoReferal.rewardXPPtotal.add(buyerBonusXPP);
+
+            UserReferalInfo storage infoInviter = userReferalInfo[_inviter];
+            infoInviter.refAmount = infoInviter.refAmount.add(1);
+            infoInviter.rewardUSDC = infoInviter.rewardUSDC.add(_amountUSD.mul(procRefUSD).div(procRefUSDDiv));
+            infoInviter.rewardUSDCtotal = infoInviter.rewardUSDCtotal.add(_amountUSD.mul(procRefUSD).div(procRefUSDDiv));
+
+            calculateTopReferral(address(XPADToken), _referal);
+            calculateTopReferral(address(0), _inviter);
+
+            return _amountUSD.mul(procRefUSD).div(procRefUSDDiv);
+        } else {
+            UserReferalInfo storage infoReferal = userReferalInfo[_referal];
+
+            referralBonus = getLevelFromStakeContract(_inviter, true);
+            infoReferal.rewardXPP = infoReferal.rewardXPP.add(referralBonus);
+            infoReferal.rewardXPPtotal = infoReferal.rewardXPPtotal.add(referralBonus);
+
+            UserReferalInfo storage infoInviter = userReferalInfo[_inviter];
+            inviterLevelBonus = getLevelFromStakeContract(_inviter, false);
+            infoInviter.refAmount = infoInviter.refAmount.add(1);
+            infoInviter.rewardXPP = infoInviter.rewardXPP.add(inviterLevelBonus);
+            infoInviter.rewardXPPtotal = infoInviter.rewardXPPtotal.add(inviterLevelBonus);
+
+            calculateTopReferral(address(XPADToken), _referal);
+            calculateTopReferral(address(XPADToken), _inviter);
+
+            return inviterLevelBonus;
+        }
+    }
+
+    function getTopRef(bool _tokenXpp) public view returns (address[] memory) {
+        if (_tokenXpp) {
+            return topXpp;
+        } else {
+            return topUsd;
+        }
+    }
+
+    function claimRef(address _tokenAddress) public {
+        if (_tokenAddress == address(XPADToken)) {
+            UserReferalInfo storage userInfo = userReferalInfo[msg.sender];
+            require(userInfo.rewardXPP > 0, "No XPP tokens to claim");
+
+            uint256 amount = userInfo.rewardXPP;
+            userInfo.rewardXPP = 0;
+
+            XPADToken.transfer(msg.sender, amount);
+        } else if (_tokenAddress == address(USDToken)) {
+            UserReferalInfo storage userInfo = userReferalInfo[msg.sender];
+            require(userInfo.rewardUSDC > 0, "No USD tokens to claim");
+
+            uint256 amount = userInfo.rewardUSDC;
+            userInfo.rewardUSDC = 0;
+
+            USDToken.transfer(msg.sender, amount);
+        }
+    }
+
+    function claim(address _tokenAddress) public {
+        uint256 _climAmount;
+
+        for (uint256 i = 0; i < salesToken[_tokenAddress].addressToS[msg.sender].length; i++) {
+            uint256 _totalTime = block.timestamp.sub(salesToken[_tokenAddress].addressToS[msg.sender][i].startTimeVesting);
+            uint256 _roundClaimAmount;
+            if (_totalTime >= salesToken[_tokenAddress].addressToS[msg.sender][i].vestingDays.mul(86400)) {
+                _roundClaimAmount = salesToken[_tokenAddress].addressToS[msg.sender][i].value;
+            } else {
+                if (salesToken[_tokenAddress].addressToS[msg.sender][i].vestingDays < 30) {
+                    _roundClaimAmount = 0;
+                } else {
+                    _roundClaimAmount = salesToken[_tokenAddress].addressToS[msg.sender][i].value.mul(_totalTime.div(2592000)).div(salesToken[_tokenAddress].addressToS[msg.sender][i].vestingDays.div(30));
+                }
+            }
+            _climAmount = _climAmount.add(_roundClaimAmount).sub(salesToken[_tokenAddress].addressToS[msg.sender][i].claimed);
+            salesToken[_tokenAddress].addressToS[msg.sender][i].claimed = _roundClaimAmount;
+        }
+
+        require(_climAmount > 0, "Available for claim 0 XPP");
+        IERC20(_tokenAddress).transfer(msg.sender, _climAmount);
+    }
+
+    function getClaimAmount(address _tokenAddress) public view returns (uint) {
+        uint256 _climAmount;
+
+        for (uint256 i = 0; i < salesToken[_tokenAddress].addressToS[msg.sender].length; i++) {
+            uint256 _totalTime = block.timestamp.sub(salesToken[_tokenAddress].addressToS[msg.sender][i].startTimeVesting);
+            uint256 _roundClaimAmount;
+            if (_totalTime >= salesToken[_tokenAddress].addressToS[msg.sender][i].vestingDays.mul(86400)) {
+                _roundClaimAmount = salesToken[_tokenAddress].addressToS[msg.sender][i].value;
+            } else {
+                if (salesToken[_tokenAddress].addressToS[msg.sender][i].vestingDays < 30) {
+                    _roundClaimAmount = 0;
+                } else {
+                    _roundClaimAmount = salesToken[_tokenAddress].addressToS[msg.sender][i].value.mul(_totalTime.div(2592000)).div(salesToken[_tokenAddress].addressToS[msg.sender][i].vestingDays.div(30));
+                }
+            }
+            _climAmount = _climAmount.add(_roundClaimAmount).sub(salesToken[_tokenAddress].addressToS[msg.sender][i].claimed);
+        }
+        return _climAmount;
+    }
+
+    function getTotalClaimAmount(address _tokenAddress) public view returns (uint) {
+        uint256 _climAmount;
+        for (uint256 i = 0; i < salesToken[_tokenAddress].addressToS[msg.sender].length; i++) {
+            _climAmount = _climAmount.add(salesToken[_tokenAddress].addressToS[msg.sender][i].value).sub(salesToken[_tokenAddress].addressToS[msg.sender][i].claimed);
+        }
+        return _climAmount;
+    }
+
+    // only owner functions
+
+    function pause() public onlyOwner {
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        _unpause();
+    }
+
+    function pauseTokenSale(address _tokenAddress) public onlyOwner {
+        salesToken[_tokenAddress].pause = true;
+    }
+
+    function unpauseTokenSale(address _tokenAddress) public onlyOwner {
+        salesToken[_tokenAddress].pause = false;
+    }
+
+    function addTokenSale(address _tokenAddress, uint256 _minUSD, address _addressUSD) public onlyOwner {
+        require(salesToken[_tokenAddress].addressUSD == address(0), "this token is already being sold");
+        salesToken[_tokenAddress].pause = true;
+        salesToken[_tokenAddress].minUSD = _minUSD;
+        salesToken[_tokenAddress].addressUSD = _addressUSD;
+        allSalesToken.push(_tokenAddress);
+    }
+
+    function changeTokenSale(address _tokenAddress, uint256 _minUSD, address _addressUSD) public onlyOwner {
+        require(salesToken[_tokenAddress].addressUSD != address(0), "this token is not for sale yet");
+        salesToken[_tokenAddress].minUSD = _minUSD;
+        salesToken[_tokenAddress].addressUSD = _addressUSD;
+    }
+
+    function changeRound(address _tokenAddress, uint256 i, uint256 _vesting, uint256 _price, uint256 _priceDiv, uint256 _maxTotalAmount) public onlyOwner {
+        salesToken[_tokenAddress].allRounds[i] = Round(_vesting, _price, _priceDiv, _maxTotalAmount);
+    }
+
+    function addRound(address _tokenAddress, uint256 index, uint256 vesting, uint256 price, uint256 _priceDiv, uint256 maxTotalAmount) public onlyOwner {
+        require(index >= 0 && index <= salesToken[_tokenAddress].allRounds.length, "Invalid index");
+
+        if (salesToken[_tokenAddress].allRounds.length == 0) {
+            salesToken[_tokenAddress].allRounds.push(Round(vesting, price, _priceDiv, maxTotalAmount));
+        } else {
+            salesToken[_tokenAddress].allRounds.push(salesToken[_tokenAddress].allRounds[salesToken[_tokenAddress].allRounds.length.sub(1)]);
+            for (uint256 i = salesToken[_tokenAddress].allRounds.length.sub(1); i > index; i--) {
+                uint256 prevIndex = i - 1;
+                salesToken[_tokenAddress].allRounds[i] = salesToken[_tokenAddress].allRounds[prevIndex];
+            }
+            salesToken[_tokenAddress].allRounds[index] = Round(vesting, price, _priceDiv, maxTotalAmount);
+        }
+    }
+
+    function deleteRound(address _tokenAddress, uint256 _i) public onlyOwner {
+        for (uint256 i = _i; i < salesToken[_tokenAddress].allRounds.length; i++) {
+            if (i.add(1) < salesToken[_tokenAddress].allRounds.length) {
+                salesToken[_tokenAddress].allRounds[i] = salesToken[_tokenAddress].allRounds[i.add(1)];
+            }
+        }
+        salesToken[_tokenAddress].allRounds.pop();
+    }
+
+    function setTotalSold(address _tokenAddress, uint256 _totalSold) public onlyOwner {
+        salesToken[_tokenAddress].totalSold = _totalSold;
+    }
+
+    function setUSDRecipient(address _address) public onlyOwner {
+        USDRecipient = _address;
+    }
+
+    function withdraw(address _tokenAddress, uint256 _amount) public onlyOwner {
+        IERC20(_tokenAddress).transfer(msg.sender, _amount);
+    }
+
+    function getVestingDataOwner(address _tokenAddress, address _address) public onlyOwner view returns (Vesting[] memory){
+        return salesToken[_tokenAddress].addressToS[_address];
+    }
+
+    function setAmountReferal(
+        uint256 _refZeroLevelInv, 
+        uint256 _refFirstLevelInv, 
+        uint256 _refSecondLevelInv, 
+        uint256 _refThirdLevelInv,
+        uint256 _refZeroLevelRef, 
+        uint256 _refFirstLevelRef, 
+        uint256 _refSecondLevelRef, 
+        uint256 _refThirdLevelRef
+    ) public onlyOwner {
+        refZeroLevelInv = _refZeroLevelInv;
+        refFirstLevelInv = _refFirstLevelInv;
+        refSecondLevelInv = _refSecondLevelInv;
+        refThirdLevelInv = _refThirdLevelInv;
+        refZeroLevelRef = _refZeroLevelRef;
+        refFirstLevelRef = _refFirstLevelRef;
+        refSecondLevelRef = _refSecondLevelRef;
+        refThirdLevelRef = _refThirdLevelRef;
+    }
+
+    function setRewardStatus(bool _rewardStatus) public onlyOwner {
+        rewardStatus = _rewardStatus;
+    }
+
+    function setProcentUSD (uint256 _procentRefUSD, uint256 _procRefUSDDiv) public onlyOwner {
+        procRefUSD = _procentRefUSD;
+        procRefUSDDiv = _procRefUSDDiv;
+    }
+
+    function setBuyerBonusXPP (uint256 _buyerBonusXPP) public onlyOwner {
+        buyerBonusXPP = _buyerBonusXPP;
+    }
+
+    function setStatusBlackList(address _address, bool status) public onlyOwner {
+        blackList[_address] = status;
+    }
+
+    function setRewardAddrees(address _address, uint256 _rewardXPP, uint256 _rewardUSDC) public onlyOwner {
+        UserReferalInfo storage infoReferal = userReferalInfo[_address];
+        infoReferal.rewardXPP = _rewardXPP;
+        infoReferal.rewardUSDC = _rewardUSDC;
+    }
+
+    function setStakeContract(address _new) public onlyOwner {
+        stakeContract = StakeInterface(_new);
+    }
+}
+
+// File: contracts/IERC20.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (token/ERC20/IERC20.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Interface of the ERC20 standard as defined in the EIP.
+ */
+interface IERC20 {
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
+     * a call to {approve}. `value` is the new allowance.
+     */
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    /**
+     * @dev Returns the value of tokens in existence.
+     */
+    function totalSupply() external view returns (uint256);
+
+    /**
+     * @dev Returns the value of tokens owned by `account`.
+     */
+    function balanceOf(address account) external view returns (uint256);
+
+    /**
+     * @dev Moves a `value` amount of tokens from the caller's account to `to`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address to, uint256 value) external returns (bool);
+
+    /**
+     * @dev Returns the remaining number of tokens that `spender` will be
+     * allowed to spend on behalf of `owner` through {transferFrom}. This is
+     * zero by default.
+     *
+     * This value changes when {approve} or {transferFrom} are called.
+     */
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    /**
+     * @dev Sets a `value` amount of tokens as the allowance of `spender` over the
+     * caller's tokens.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * IMPORTANT: Beware that changing an allowance with this method brings the risk
+     * that someone may use both the old and the new allowance by unfortunate
+     * transaction ordering. One possible solution to mitigate this race
+     * condition is to first reduce the spender's allowance to 0 and set the
+     * desired value afterwards:
+     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+     *
+     * Emits an {Approval} event.
+     */
+    function approve(address spender, uint256 value) external returns (bool);
+
+    /**
+     * @dev Moves a `value` amount of tokens from `from` to `to` using the
+     * allowance mechanism. `value` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+}
+
+
+// File: contracts/Ownable.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (access/Ownable.sol)
+
+pragma solidity ^0.8.20;
+
+import {Context} from "./Context.sol";
+
+/**
+ * @dev Contract module which provides a basic access control mechanism, where
+ * there is an account (an owner) that can be granted exclusive access to
+ * specific functions.
+ *
+ * The initial owner is set to the address provided by the deployer. This can
+ * later be changed with {transferOwnership}.
+ *
+ * This module is used through inheritance. It will make available the modifier
+ * `onlyOwner`, which can be applied to your functions to restrict their use to
+ * the owner.
+ */
+abstract contract Ownable is Context {
+    address private _owner;
+
+    /**
+     * @dev The caller account is not authorized to perform an operation.
+     */
+    error OwnableUnauthorizedAccount(address account);
+
+    /**
+     * @dev The owner is not a valid owner account. (eg. `address(0)`)
+     */
+    error OwnableInvalidOwner(address owner);
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev Initializes the contract setting the address provided by the deployer as the initial owner.
+     */
+    constructor(address initialOwner) {
+        if (initialOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(initialOwner);
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if the sender is not the owner.
+     */
+    function _checkOwner() internal view virtual {
+        if (owner() != _msgSender()) {
+            revert OwnableUnauthorizedAccount(_msgSender());
+        }
+    }
+
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby disabling any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        if (newOwner == address(0)) {
+            revert OwnableInvalidOwner(address(0));
+        }
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Internal function without access restriction.
+     */
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+
+// File: contracts/Pausable.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/Pausable.sol)
+
+pragma solidity ^0.8.20;
+
+import {Context} from "./Context.sol";
+
+/**
+ * @dev Contract module which allows children to implement an emergency stop
+ * mechanism that can be triggered by an authorized account.
+ *
+ * This module is used through inheritance. It will make available the
+ * modifiers `whenNotPaused` and `whenPaused`, which can be applied to
+ * the functions of your contract. Note that they will not be pausable by
+ * simply including this module, only once the modifiers are put in place.
+ */
+abstract contract Pausable is Context {
+    bool private _paused;
+
+    /**
+     * @dev Emitted when the pause is triggered by `account`.
+     */
+    event Paused(address account);
+
+    /**
+     * @dev Emitted when the pause is lifted by `account`.
+     */
+    event Unpaused(address account);
+
+    /**
+     * @dev The operation failed because the contract is paused.
+     */
+    error EnforcedPause();
+
+    /**
+     * @dev The operation failed because the contract is not paused.
+     */
+    error ExpectedPause();
+
+    /**
+     * @dev Initializes the contract in unpaused state.
+     */
+    constructor() {
+        _paused = false;
+    }
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is not paused.
+     *
+     * Requirements:
+     *
+     * - The contract must not be paused.
+     */
+    modifier whenNotPaused() {
+        _requireNotPaused();
+        _;
+    }
+
+    /**
+     * @dev Modifier to make a function callable only when the contract is paused.
+     *
+     * Requirements:
+     *
+     * - The contract must be paused.
+     */
+    modifier whenPaused() {
+        _requirePaused();
+        _;
+    }
+
+    /**
+     * @dev Returns true if the contract is paused, and false otherwise.
+     */
+    function paused() public view virtual returns (bool) {
+        return _paused;
+    }
+
+    /**
+     * @dev Throws if the contract is paused.
+     */
+    function _requireNotPaused() internal view virtual {
+        if (paused()) {
+            revert EnforcedPause();
+        }
+    }
+
+    /**
+     * @dev Throws if the contract is not paused.
+     */
+    function _requirePaused() internal view virtual {
+        if (!paused()) {
+            revert ExpectedPause();
+        }
+    }
+
+    /**
+     * @dev Triggers stopped state.
+     *
+     * Requirements:
+     *
+     * - The contract must not be paused.
+     */
+    function _pause() internal virtual whenNotPaused {
+        _paused = true;
+        emit Paused(_msgSender());
+    }
+
+    /**
+     * @dev Returns to normal state.
+     *
+     * Requirements:
+     *
+     * - The contract must be paused.
+     */
+    function _unpause() internal virtual whenPaused {
+        _paused = false;
+        emit Unpaused(_msgSender());
+    }
+}
+
+
+// File: contracts/SafeMath.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.9.0) (utils/math/SafeMath.sol)
+
+pragma solidity ^0.8.0;
+
+// CAUTION
+// This version of SafeMath should only be used with Solidity 0.8 or later,
+// because it relies on the compiler's built in overflow checks.
+
+/**
+ * @dev Wrappers over Solidity's arithmetic operations.
+ *
+ * NOTE: `SafeMath` is generally not needed starting with Solidity 0.8, since the compiler
+ * now has built in overflow checking.
+ */
+library SafeMath {
+    /**
+     * @dev Returns the addition of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryAdd(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            uint256 c = a + b;
+            if (c < a) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function trySub(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b > a) return (false, 0);
+            return (true, a - b);
+        }
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMul(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+            // benefit is lost if 'b' is also tested.
+            // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+            if (a == 0) return (true, 0);
+            uint256 c = a * b;
+            if (c / a != b) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the division of two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryDiv(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a / b);
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMod(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a % b);
+        }
+    }
+
+    /**
+     * @dev Returns the addition of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `+` operator.
+     *
+     * Requirements:
+     *
+     * - Addition cannot overflow.
+     */
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a + b;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting on
+     * overflow (when the result is negative).
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a - b;
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `*` operator.
+     *
+     * Requirements:
+     *
+     * - Multiplication cannot overflow.
+     */
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a * b;
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers, reverting on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator.
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a / b;
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * reverting when dividing by zero.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a % b;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting with custom message on
+     * overflow (when the result is negative).
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {trySub}.
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        unchecked {
+            require(b <= a, errorMessage);
+            return a - b;
+        }
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers, reverting with custom message on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator. Note: this function uses a
+     * `revert` opcode (which leaves remaining gas untouched) while Solidity
+     * uses an invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a / b;
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * reverting with custom message when dividing by zero.
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {tryMod}.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a % b;
+        }
+    }
+}
+

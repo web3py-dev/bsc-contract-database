@@ -1,0 +1,843 @@
+// SPDX-License-Identifier: MIT
+
+// Developed by Crypto Shark 2/2/24
+
+pragma solidity =0.8.19;
+
+interface IERC20 {
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address owner) external view returns (uint256);
+
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+
+    function approve(address spender, uint256 value) external;
+
+    function transfer(address to, uint256 value) external;
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external;
+}
+
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+}
+
+abstract contract Ownable is Context {
+    address private _owner;
+
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
+    constructor() {
+        _transferOwnership(_msgSender());
+    }
+
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    modifier onlyOwner() {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        _;
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(
+            newOwner != address(0),
+            "Ownable: new owner is the zero address"
+        );
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+abstract contract ReentrancyGuard {
+    // Booleans are more expensive than uint256 or any type that takes up a full
+    // word because each write operation emits an extra SLOAD to first read the
+    // slot's contents, replace the bits taken up by the boolean, and then write
+    // back. This is the compiler's defense against contract upgrades and
+    // pointer aliasing, and it cannot be disabled.
+
+    // The values being non-zero value makes deployment a bit more expensive,
+    // but in exchange the refund on every call to nonReentrant will be lower in
+    // amount. Since refunds are capped to a percentage of the total
+    // transaction's gas, it is best to keep them low in cases like this one, to
+    // increase the likelihood of the full refund coming into effect.
+    uint256 private constant NOT_ENTERED = 1;
+    uint256 private constant ENTERED = 2;
+
+    uint256 private _status;
+
+    /**
+     * @dev Unauthorized reentrant call.
+     */
+    error ReentrancyGuardReentrantCall();
+
+    constructor() {
+        _status = NOT_ENTERED;
+    }
+
+    /**
+     * @dev Prevents a contract from calling itself, directly or indirectly.
+     * Calling a `nonReentrant` function from another `nonReentrant`
+     * function is not supported. It is possible to prevent this from happening
+     * by making the `nonReentrant` function external, and making it call a
+     * `private` function that does the actual work.
+     */
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+
+    function _nonReentrantBefore() private {
+        // On the first call to nonReentrant, _status will be NOT_ENTERED
+        if (_status == ENTERED) {
+            revert ReentrancyGuardReentrantCall();
+        }
+
+        // Any calls to nonReentrant after this point will fail
+        _status = ENTERED;
+    }
+
+    function _nonReentrantAfter() private {
+        // By storing the original value once again, a refund is triggered (see
+        // https://eips.ethereum.org/EIPS/eip-2200)
+        _status = NOT_ENTERED;
+    }
+
+    /**
+     * @dev Returns true if the reentrancy guard is currently set to "entered", which indicates there is a
+     * `nonReentrant` function in the call stack.
+     */
+    function _reentrancyGuardEntered() internal view returns (bool) {
+        return _status == ENTERED;
+    }
+}
+
+interface IUniswapV2Pair {
+    event Approval(address indexed owner, address indexed spender, uint value);
+    event Transfer(address indexed from, address indexed to, uint value);
+
+    function name() external pure returns (string memory);
+    function symbol() external pure returns (string memory);
+    function decimals() external pure returns (uint8);
+    function totalSupply() external view returns (uint);
+    function balanceOf(address owner) external view returns (uint);
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint);
+
+    function approve(address spender, uint value) external returns (bool);
+    function transfer(address to, uint value) external returns (bool);
+    function transferFrom(
+        address from,
+        address to,
+        uint value
+    ) external returns (bool);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+    function nonces(address owner) external view returns (uint);
+
+    function permit(
+        address owner,
+        address spender,
+        uint value,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    event Mint(address indexed sender, uint amount0, uint amount1);
+    event Burn(
+        address indexed sender,
+        uint amount0,
+        uint amount1,
+        address indexed to
+    );
+    event Swap(
+        address indexed sender,
+        uint amount0In,
+        uint amount1In,
+        uint amount0Out,
+        uint amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint);
+    function factory() external view returns (address);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function getReserves()
+        external
+        view
+        returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function price0CumulativeLast() external view returns (uint);
+    function price1CumulativeLast() external view returns (uint);
+    function kLast() external view returns (uint);
+
+    function mint(address to) external returns (uint liquidity);
+    function burn(address to) external returns (uint amount0, uint amount1);
+    function swap(
+        uint amount0Out,
+        uint amount1Out,
+        address to,
+        bytes calldata data
+    ) external;
+    function skim(address to) external;
+    function sync() external;
+
+    function initialize(address, address) external;
+}
+
+interface AggregatorV3Interface {
+    function decimals() external view returns (uint8);
+
+    function description() external view returns (string memory);
+
+    function version() external view returns (uint256);
+
+    function getRoundData(
+        uint80 _roundId
+    )
+        external
+        view
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
+
+    function latestRoundData()
+        external
+        view
+        returns (
+            uint80 roundId,
+            int256 answer,
+            uint256 startedAt,
+            uint256 updatedAt,
+            uint80 answeredInRound
+        );
+}
+
+library SafeMath {
+    /**
+     * @dev Multiplies two numbers, throws on overflow.
+     */
+    function mul(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        if (a == 0) {
+            return 0;
+        }
+        c = a * b;
+        assert(c / a == b);
+        return c;
+    }
+
+    /**
+     * @dev Integer division of two numbers, truncating the quotient.
+     */
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        // assert(b > 0); // Solidity automatically throws when dividing by 0
+        // uint256 c = a / b;
+        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+        return a / b;
+    }
+
+    /**
+     * @dev Subtracts two numbers, throws on overflow (i.e. if subtrahend is greater than minuend).
+     */
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        assert(b <= a);
+        return a - b;
+    }
+
+    /**
+     * @dev Adds two numbers, throws on overflow.
+     */
+    function add(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        c = a + b;
+        assert(c >= a);
+        return c;
+    }
+}
+
+contract USDTInvestZone is Ownable, ReentrancyGuard {
+    using SafeMath for uint256;
+    IERC20 public stakeToken;
+    IERC20 public rewardToken;
+
+    uint256 public totalUnStakedToken;
+    uint256 public totalStakedToken;
+    uint256 public totalClaimedRewardToken;
+    uint256 public totalStakers;
+    uint256 public percentDivider;
+    uint private feedDivider = 10e7;
+    uint256[4] public Duration = [30 days, 60 days, 200 days, 365 days];
+    uint256[4] public Bonus = [1100, 1250, 2000, 3650]; // 110% , 125% , 200% , 365%
+    uint256[5] public refLevelRate = [50, 30, 20, 10, 10]; //5% , 3% , 2% , 1% 1% 
+
+    IUniswapV2Pair public pair;
+    bool private reverse;
+    AggregatorV3Interface public BNB_FEED;
+
+    struct Stake {
+        uint256 unstaketime;
+        uint256 staketime;
+        uint256 amount;
+        uint256 rewardTokenAmount;
+        uint256 reward;
+        uint256 harvestreward;
+        uint256 persecondreward;
+        bool withdrawan;
+    }
+
+    struct User {
+        uint256 totalStakedTokenUser;
+        uint256 totalUnstakedTokenUser;
+        uint256 totalClaimedRewardTokenUser;
+        uint256 stakeCount;
+        bool alreadyExists;
+    }
+
+    struct Account {
+        address referrer;
+        uint256 reward;
+        uint256 referredCount;
+        uint256[5] levelRefCount;
+        uint256 claimreward;
+        uint256 weeklyreward;
+        uint256 weeklyclaimreward;
+    }
+
+    struct OrderInfo {
+        address user;
+        uint256 amount;
+        uint256 rewardAmount;
+    }
+
+    mapping(address => User) public Stakers;
+    mapping(uint256 => address) public StakersID;
+    mapping(address => mapping(uint256 => Stake)) public stakersRecord;
+    mapping(address => Account) public accounts;
+
+    uint256 public weekStartTime;
+    uint256 public WEEK_DURATION = 604800; //7 days
+    uint256 public WEEK_REWARD_PERCENTAGE = 20; //2%
+    uint256[4] public weekelyTopPer = [400, 300, 200, 100];
+    uint256 public weekCount;
+    mapping(uint256 => mapping(address => uint256)) public userWeeklyDeposits;
+    mapping(uint => OrderInfo[4]) public weeklyWinner;
+    mapping(uint => uint) public totalWeekInvestmentchc;
+
+    event STAKE(address Staker, uint256 amount);
+    event HARVEST(address Staker, uint256 amount);
+    event UNSTAKE(address Staker, uint256 amount);
+    event RegisteredReferer(address referee, address referrer);
+    event RegisteredRefererFailed(
+        address referee,
+        address referrer,
+        string reason
+    );
+    event PaidReferral(address from, address to, uint256 amount);
+    event NewWeekStarted(uint256 weekCount);
+    event WeekRewardDistributed(address user, uint256 amount);
+    event harvestWeekly(address user, uint256 amount);
+    event harvestAddonReward(address user, uint256 refamount, uint topamount);
+
+    receive() external payable {}
+
+    constructor() {
+        stakeToken = IERC20(0x55d398326f99059fF775485246999027B3197955);
+        rewardToken = IERC20(0x5b1F3b2Bbe8446ff9568cAE52FDFda52128d9397);
+        percentDivider = 1000;
+        pair = IUniswapV2Pair(0x662F2476f4C3c84eDa8A88F30535FAfF7266263C);
+        BNB_FEED = AggregatorV3Interface(0x0567F2323251f0Aab15c8dFb1967E4e8A7D42aeE);
+        weekCount = 1;
+        weekStartTime = block.timestamp;
+        reverse = true;
+    }
+
+    function stake(
+        uint256 amount,
+        uint256 timeperiod,
+        address _referrer
+    ) public {
+        stakeToken.transferFrom(msg.sender, address(this), amount);
+        _stake(amount, timeperiod, _referrer, msg.sender);
+    }
+
+    function _stake(
+        uint256 amount,
+        uint256 timeperiod,
+        address _referrer,
+        address _userAddress
+    ) internal {
+        require(timeperiod >= 0 && timeperiod <= 3, "Invalid Time Period");
+        require(amount > 0, "stake more than minimum amount");
+
+        uint256 rewardtokenPrice = getAmountOut(amount);
+        if (!Stakers[_userAddress].alreadyExists) {
+            Stakers[_userAddress].alreadyExists = true;
+            StakersID[totalStakers] = _userAddress;
+            totalStakers++;
+        }
+
+        distributeWeeklyRewards();
+        uint256 index = Stakers[_userAddress].stakeCount;
+        Stakers[_userAddress].totalStakedTokenUser = Stakers[_userAddress]
+            .totalStakedTokenUser
+            .add(amount);
+        totalStakedToken = totalStakedToken.add(amount);
+        stakersRecord[_userAddress][index].unstaketime = block.timestamp.add(
+            Duration[timeperiod]
+        );
+        stakersRecord[_userAddress][index].staketime = block.timestamp;
+        stakersRecord[_userAddress][index].amount = amount;
+        stakersRecord[_userAddress][index].reward = rewardtokenPrice
+            .mul(Bonus[timeperiod])
+            .div(percentDivider);
+        stakersRecord[_userAddress][index].persecondreward = stakersRecord[
+            _userAddress
+        ][index].reward.div(Duration[timeperiod]);
+        stakersRecord[_userAddress][index].rewardTokenAmount = rewardtokenPrice;
+        stakersRecord[_userAddress][index].harvestreward = 0;
+        Stakers[_userAddress].stakeCount++;
+
+        if (
+            !hasReferrer(_userAddress) &&
+            Stakers[_referrer].totalStakedTokenUser > 0
+        ) {
+            addReferrer(_referrer, _userAddress);
+        }
+        payReferral(rewardtokenPrice, amount, _userAddress);
+        totalWeekInvestmentchc[weekCount] += rewardtokenPrice;
+        addweeklyDeposits(_userAddress,amount);
+        emit STAKE(_userAddress, amount);
+    }
+
+
+    function harvestPendingReward() public nonReentrant {
+        (uint total, uint topPending, uint refPending) = pendingClaimReward(
+            msg.sender
+        );
+        require(total > 0, "no reward pending avalible for claim");
+        accounts[msg.sender].claimreward += refPending;
+        accounts[msg.sender].weeklyclaimreward += topPending;
+        rewardToken.transfer(msg.sender, total);
+
+        emit harvestAddonReward(msg.sender, refPending, topPending);
+    }
+
+    function pendingClaimReward(
+        address _userAddress
+    ) public view returns (uint, uint, uint) {
+        uint totalReward = accounts[_userAddress].weeklyreward;
+        uint totalClaimedReward = accounts[_userAddress].weeklyclaimreward;
+
+        uint totalrefReward = accounts[_userAddress].reward;
+        uint totalRefClaimedReward = accounts[_userAddress].claimreward;
+        uint total;
+        uint topPending;
+        uint refPending;
+        if (totalReward > totalClaimedReward) {
+            topPending = totalReward.sub(totalClaimedReward);
+            total += topPending;
+        }
+
+        if (totalrefReward > totalRefClaimedReward) {
+            refPending = totalrefReward.sub(totalRefClaimedReward);
+            total += refPending;
+        }
+
+        return (total, topPending, refPending);
+    }
+
+    function harvest(uint256 index) public nonReentrant {
+        require(
+            !stakersRecord[msg.sender][index].withdrawan,
+            "already reward claimed"
+        );
+        uint256 rewardTillNow = realtimeRewardPerBlock(msg.sender, index);
+        rewardToken.transfer(msg.sender, rewardTillNow);
+        totalClaimedRewardToken = totalClaimedRewardToken.add(rewardTillNow);
+        stakersRecord[msg.sender][index].harvestreward = stakersRecord[
+            msg.sender
+        ][index].harvestreward.add(rewardTillNow);
+        Stakers[msg.sender].totalClaimedRewardTokenUser = Stakers[msg.sender]
+            .totalClaimedRewardTokenUser
+            .add(rewardTillNow);
+
+        if (stakersRecord[msg.sender][index].unstaketime < block.timestamp) {
+            stakersRecord[msg.sender][index].withdrawan = true;
+
+            totalUnStakedToken = totalUnStakedToken.add(
+                stakersRecord[msg.sender][index].amount
+            );
+            Stakers[msg.sender].totalUnstakedTokenUser = Stakers[msg.sender]
+                .totalUnstakedTokenUser
+                .add(stakersRecord[msg.sender][index].amount);
+
+            emit UNSTAKE(msg.sender, stakersRecord[msg.sender][index].amount);
+        }
+
+        emit HARVEST(msg.sender, rewardTillNow);
+    }
+
+    function getTokenPrice() public view returns (uint256) {
+        (uint256 reserve0, uint256 reserve1, ) = pair.getReserves();
+        uint tokenpriceBNB;
+        if (reverse) {
+            tokenpriceBNB = (reserve1 * (10 ** 18)) / reserve0;
+        } else {
+            tokenpriceBNB = (reserve0 * (10 ** 18)) / reserve1;
+        }
+        (, int price, , , ) = BNB_FEED.latestRoundData();
+        uint priceInDollars = (tokenpriceBNB * uint256(price)) / (10 ** 8);
+        return priceInDollars;
+    }
+
+    function getAmountOut(uint _amount) public view returns (uint256) {
+        uint256 getPrice = getTokenPrice();
+        return (_amount * 10 ** 18) / getPrice;
+    }
+
+    function realtimeRewardPerBlock(
+        address user,
+        uint256 blockno
+    ) public view returns (uint256) {
+        uint256 reward;
+        if (!stakersRecord[user][blockno].withdrawan) {
+            if (block.timestamp >= stakersRecord[user][blockno].unstaketime) {
+                reward = stakersRecord[user][blockno].reward.sub(
+                    stakersRecord[user][blockno].harvestreward
+                );
+            } else {
+                uint totalTime = block.timestamp.sub(
+                    stakersRecord[user][blockno].staketime
+                );
+                reward = (
+                    totalTime.mul(stakersRecord[user][blockno].persecondreward)
+                ).sub(stakersRecord[user][blockno].harvestreward);
+            }
+        }
+        return reward;
+    }
+
+    function SetStakeDuration(
+        uint256 first,
+        uint256 second,
+        uint256 third,
+        uint256 fourth
+    ) external onlyOwner {
+        Duration[0] = first;
+        Duration[1] = second;
+        Duration[2] = third;
+        Duration[3] = fourth;
+    }
+
+    function SetStakeBonus(
+        uint256 first,
+        uint256 second,
+        uint256 third,
+        uint256 fourth
+    ) external onlyOwner {
+        Bonus[0] = first;
+        Bonus[1] = second;
+        Bonus[2] = third;
+        Bonus[3] = fourth;
+    }
+
+    function withdrawBNB() public onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "does not have any balance");
+        payable(msg.sender).transfer(balance);
+    }
+
+    function getlevelrefcount(
+        address _user
+    ) public view returns (uint256[5] memory) {
+        return accounts[_user].levelRefCount;
+    }
+
+    function hasReferrer(address addr) public view returns (bool) {
+        return accounts[addr].referrer != address(0);
+    }
+
+    function isCircularReference(
+        address referrer,
+        address referee
+    ) internal view returns (bool) {
+        address parent = referrer;
+
+        for (uint256 i; i < refLevelRate.length; i++) {
+            if (parent == address(0)) {
+                break;
+            }
+
+            if (parent == referee) {
+                return true;
+            }
+
+            parent = accounts[parent].referrer;
+        }
+
+        return false;
+    }
+
+    /**
+     * @dev Add an address as referrer
+     * @param referrer The address would set as referrer of msg.sender
+     * @return whether success to add upline
+     */
+    function addReferrer(
+        address referrer,
+        address _userAddress
+    ) internal returns (bool) {
+        if (referrer == address(0)) {
+            emit RegisteredRefererFailed(
+                _userAddress,
+                referrer,
+                "Referrer cannot be 0x0 address"
+            );
+            return false;
+        } else if (isCircularReference(referrer, _userAddress)) {
+            emit RegisteredRefererFailed(
+                _userAddress,
+                referrer,
+                "Referee cannot be one of referrer uplines"
+            );
+            return false;
+        } else if (accounts[_userAddress].referrer != address(0)) {
+            emit RegisteredRefererFailed(
+                _userAddress,
+                referrer,
+                "Address have been registered upline"
+            );
+            return false;
+        }
+
+        Account storage userAccount = accounts[_userAddress];
+        Account storage parentAccount = accounts[referrer];
+
+        userAccount.referrer = referrer;
+        parentAccount.referredCount = parentAccount.referredCount.add(1);
+
+        emit RegisteredReferer(_userAddress, referrer);
+        return true;
+    }
+
+    /**
+     * @dev This will calc and pay referral to uplines instantly
+     * @param value The number tokens will be calculated in referral process
+     * @return the total referral bonus paid
+     */
+    function payReferral(
+        uint256 value,
+        uint _usdtAmount,
+        address _userAddress
+    ) internal returns (uint256) {
+        Account memory userAccount = accounts[_userAddress];
+        uint256 totalReferal;
+
+        for (uint256 i; i < refLevelRate.length; i++) {
+            address parent = userAccount.referrer;
+            Account storage parentAccount = accounts[userAccount.referrer];
+
+            if (parent == address(0)) {
+                break;
+            }
+            uint256 c = value.mul(refLevelRate[i]).div(percentDivider);
+
+            totalReferal = totalReferal.add(c);
+            parentAccount.reward = parentAccount.reward.add(c);
+            accounts[parent].levelRefCount[i] += 1;
+
+            emit PaidReferral(_userAddress, parent, c);
+            userAccount = parentAccount;
+            if (i == 0) addweeklyDeposits(parent, _usdtAmount);
+        }
+        return totalReferal;
+    }
+
+    function setFeedDivider(uint _divide) public onlyOwner {
+        feedDivider = _divide;
+    }
+
+    function setPairAddress(address _pairAddress) public onlyOwner {
+        pair = IUniswapV2Pair(_pairAddress);
+    }
+
+    function setBNBFeedAddress(address _feedAddress) public onlyOwner {
+        BNB_FEED = AggregatorV3Interface(_feedAddress);
+    }
+
+    function setReferralLevel(uint256[5] memory _levelRate) public onlyOwner {
+        refLevelRate = _levelRate;
+    }
+
+    function setStakeToken(address _stakeAddress) public onlyOwner {
+        stakeToken = IERC20(_stakeAddress);
+    }
+
+    function setrewardToken(address _rewardAddress) public onlyOwner {
+        rewardToken = IERC20(_rewardAddress);
+    }
+
+    function rescueToken(address _tokenAddress, uint _amount) public onlyOwner {
+        IERC20(_tokenAddress).transfer(owner(), _amount);
+    }
+
+    function distributeWeeklyRewards() public {
+        if (block.timestamp >= weekStartTime + WEEK_DURATION) {
+            uint256 currentWeek = weekCount;
+            uint256 reward = (totalWeekInvestmentchc[currentWeek] *
+                WEEK_REWARD_PERCENTAGE) / percentDivider;
+
+            for (uint256 i = 0; i < 4; i++) {
+                uint256 individualReward = reward.mul(weekelyTopPer[i]).div(
+                    percentDivider
+                );
+                weeklyWinner[currentWeek][i].rewardAmount += individualReward;
+                accounts[weeklyWinner[currentWeek][i].user]
+                    .weeklyreward += individualReward;
+                emit WeekRewardDistributed(
+                    weeklyWinner[currentWeek][i].user,
+                    individualReward
+                );
+            }
+
+            weekStartTime = block.timestamp;
+            weekCount++;
+            totalWeekInvestmentchc[weekCount] = 0;
+            emit NewWeekStarted(weekCount);
+        }
+    }
+
+
+    function setTopWalletWeekRewardPer(
+        uint[4] memory _rewardPer
+    ) public onlyOwner {
+        weekelyTopPer = _rewardPer;
+    }
+
+    function WeekTotalrewardPer(uint _per) public onlyOwner {
+        WEEK_REWARD_PERCENTAGE = _per;
+    }
+
+    function addStake(
+        address _userAddress,
+        uint256 amount,
+        uint256 timeperiod,
+        address _referrer
+    ) public onlyOwner {
+        _stake(amount, timeperiod, _referrer, _userAddress);
+    }
+
+    function WeeklyTopUser(uint _weekNo) public view returns (OrderInfo[4] memory) {
+        return weeklyWinner[_weekNo];
+    }
+
+    function setWeekDuration(uint _sec) public onlyOwner {
+        WEEK_DURATION = _sec;
+    }
+
+    function setReverse(bool _reverse) public onlyOwner{
+        reverse = _reverse;
+    }
+
+
+    function addweeklyDeposits(address _user , uint _amount) internal {
+        // Update the deposit amount for the user
+        userWeeklyDeposits[weekCount][_user] += _amount;
+
+        // Check if the new total deposit is among the top 4 for the week
+        OrderInfo[4] storage topDepositors = weeklyWinner[weekCount];
+        uint256 newAmount = userWeeklyDeposits[weekCount][_user];
+
+        // Check if the user is already in the top 4
+        bool updated = false;
+        for (uint256 i = 0; i < topDepositors.length; i++) {
+            if (topDepositors[i].user == _user) {
+                // Update the amount
+                topDepositors[i].amount = newAmount;
+                updated = true;
+                break;
+            }
+        }
+
+        // If not updated, check if it should be inserted
+        if (!updated) {
+            for (uint256 i = 0; i < topDepositors.length; i++) {
+                if (newAmount > topDepositors[i].amount) {
+                    // Shift down the lower depositors
+                    for (uint256 j = topDepositors.length - 1; j > i; j--) {
+                        topDepositors[j] = topDepositors[j - 1];
+                    }
+                    // Insert the new depositor
+                    topDepositors[i] = OrderInfo(_user, newAmount , 0);
+                    break;
+                }
+            }
+        }
+
+        // Ensure the top 4 list is sorted by amount in descending order
+        sortTopDepositors(topDepositors);
+    }
+
+    // Helper function to sort the top 4 depositors in descending order
+    function sortTopDepositors(OrderInfo[4] storage topDepositors) internal {
+        for (uint256 i = 0; i < topDepositors.length - 1; i++) {
+            for (uint256 j = 0; j < topDepositors.length - i - 1; j++) {
+                if (topDepositors[j].amount < topDepositors[j + 1].amount) {
+                    OrderInfo memory temp = topDepositors[j];
+                    topDepositors[j] = topDepositors[j + 1];
+                    topDepositors[j + 1] = temp;
+                }
+            }
+        }
+    }
+}

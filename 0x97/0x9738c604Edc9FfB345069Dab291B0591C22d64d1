@@ -1,0 +1,729 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.20;
+library SafeMath {
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, "SafeMath: addition overflow");
+
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return sub(a, b, "SafeMath: subtraction overflow");
+    }
+
+    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        uint256 c = a - b;
+
+        return c;
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+        // benefit is lost if 'b' is also tested.
+        // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+
+    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+
+        return c;
+    }
+
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return mod(a, b, "SafeMath: modulo by zero");
+    }
+
+    function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+        require(b != 0, errorMessage);
+        return a % b;
+    }
+}
+
+interface IERC20 {
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+}
+interface IEERC314 {
+  event Transfer(address indexed from, address indexed to, uint256 value);
+  event AddLiquidity(uint32 _blockToUnlockLiquidity, uint256 value);
+  event RemoveLiquidity(uint256 value);
+  event Swap(address indexed sender, uint amount0In, uint amount1In, uint amount0Out, uint amount1Out);
+  event TrueSwap(address indexed sender,bool buy, uint amountIn, uint amountOut);
+}
+
+interface IBindUser{
+    function getrecommend(address _addr) external view returns(address);
+    function setRecommenderInterFace(address _addr,address _leader) external;
+}
+
+interface IBurn{
+    function sendMainCoin(address payable _addr,uint _amount) external;
+}
+interface IburnRewardAddress {
+    function process(uint256 gas) external returns (uint256, uint256, uint256);
+    function setBalance(address payable account, uint256 newBalance) external;
+    function distributeCAKEDividends(uint256 amount) external;
+    function balanceOf(address account) external view returns(uint);
+}
+interface IbsccreationAddress{
+    function sellCreationContract(uint _amount) external;
+}
+
+abstract contract ERC314 is IEERC314 {
+    using SafeMath for uint256;
+    mapping(address account => uint256) private _balances;
+
+    mapping(address account => uint256) private _lastTxTime;
+
+    mapping(address account => uint32) private lastTransaction;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    uint256 private _totalSupply;
+    uint256 public _maxWallet;
+    uint32 public blockToUnlockLiquidity;
+
+    uint256 public cooldownSec = 3;
+    uint public endTotalSupply = 2100000 * 1e18;
+    address public deadAddress = 0x000000000000000000000000000000000000dEaD;
+
+    event Approval(address indexed owner,address indexed spender,uint256 value);
+    event AutoNukeLP(uint256 lpBalance,uint256 burnAmount,uint256 time);
+    event ProcessedDividendTracker(
+        uint256 iterations,
+        uint256 claims,
+        uint256 lastProcessedIndex,
+        bool indexed automatic,
+        uint256 gas,
+        address indexed processor
+    );
+    event autoLineToDead(address indexed owner,uint now,uint update,uint sub);
+    string private _name;
+    string private _symbol;
+
+    address public owner;
+    address public liquidityProvider;
+
+    bool public tradingEnable;
+    bool public liquidityAdded;
+    bool public maxWalletEnable;
+
+
+    uint public buysellFeeToCombustion = 20;  
+
+    uint public buysellFeeTodividend = 10;  
+
+    uint public buysellFeeToShare = 15;  
+    uint [] public arrayRecommand = [30,20,15,5,5,5,5,5,5,5];
+
+    uint public buysellFeeToDAO = 5;  
+
+    uint public minHave = 5000 * 1e18;
+
+    bool public lpBurnEnabled = true;
+    uint256 public lpBurnFrequency = 3600 seconds;
+    uint256 public lastLpBurnTime;
+
+    uint256 public percentForLPBurn = 20; // 20 = 0.2%
+
+
+
+  address payable public marketAddress = payable(0x501D2D9B7c5ff4D3aA265B3e30fd75ca26537931);
+
+
+   address payable public daoAddress;
+
+   address payable public holdingAddress;
+
+  address payable public burnAddress;
+  uint [] public arrayBurnRecommand = [70,10,4,2,2,2,2,2,2,2,2];
+
+  address payable public burnRewardAddress;
+
+  address public bindUserAddress;
+
+  address public bsccreationAddress;
+
+
+  uint public gasForProcessing = 300000;
+
+
+  uint public creationfee = 20;
+
+  uint [] public arrayCreationfee = [35,10,5,50];
+
+
+  uint public maxBurn = 50;
+
+  uint public maxBurnBNB = 2 * 1e18;
+
+  //uint public minBurnBNB = 2 * 1e14;
+
+
+    mapping(address => bool) public isDAOList;
+    uint256 public daoTransBalance = 2;
+    uint public oneDaoBNB = 2 * 1e18;
+    uint public oneDaoToken = 100000 * 1e18;
+    mapping(address => mapping(uint256 => uint256)) public daoDayTransCount;
+    bool public isDaoStatus;
+  modifier onlyOwner() {
+    require(msg.sender == owner, "not the owner");
+    _;
+  }
+  modifier onlyLiquidityProvider() {
+    require(msg.sender == liquidityProvider || msg.sender == owner, "not the liquidity");
+    _;
+  }
+  constructor() {
+    _name = "UFC319";  
+    _symbol = "UFC319";  
+    _totalSupply = 100000000000 *1e18;
+    _maxWallet = _totalSupply;
+    owner = msg.sender;
+    tradingEnable = false;
+    maxWalletEnable = true;
+    uint256 liquidityAmount = 35000000 * 1e18;
+    _balances[address(this)] = liquidityAmount;
+    _balances[owner] = _totalSupply - liquidityAmount;
+
+    emit Transfer(address(0), address(this), liquidityAmount);
+    emit Transfer(address(0), owner, _totalSupply - liquidityAmount);
+    
+    liquidityAdded = false;
+    isDaoStatus = true;
+  }
+
+    function getDayStart() public view returns(uint) {
+        if(block.timestamp % 86400 < 57600) {
+            return (block.timestamp)/ 86400 * 86400 - 28800;
+        } else {
+            return (block.timestamp)/ 86400 * 86400 - 28800 + 86400;
+        }
+    }
+
+  receive() external payable {
+    if(isDaoStatus){
+       sendDao(address(0));
+    }else{
+        if(tradingEnable){
+            buy();
+        }
+    }
+  }
+
+  function sendDao(address _leader) public payable {
+    require(!isDAOList[msg.sender],"not more");
+    if(isDaoStatus){
+       if(msg.sender  == tx.origin){
+            if(msg.value == oneDaoBNB){
+                isDAOList[msg.sender] = true;
+
+                IburnRewardAddress(daoAddress).setBalance(payable(msg.sender),1e18);
+                _transfer(address(this),msg.sender,oneDaoToken);
+                if(!isContract(_leader)){
+                    IBindUser(bindUserAddress).setRecommenderInterFace(msg.sender,_leader);
+                }
+            }
+        }
+    }
+  }
+  function name() public view virtual returns (string memory) {
+    return _name;
+  }
+
+  function symbol() public view virtual returns (string memory) {
+    return _symbol;
+  }
+
+  function decimals() public view virtual returns (uint8) {
+    return 18;
+  }
+
+  function totalSupply() public view virtual returns (uint256) {
+    return _totalSupply;
+  }
+
+  function balanceOf(address account) public view virtual returns (uint256) {
+    return _balances[account];
+  }
+
+    function getBlockTime() public view returns(uint){
+        return block.timestamp;
+    }
+
+    function allowance(
+        address _owner,
+        address spender
+    ) public view virtual returns (uint256) {
+        return _allowances[_owner][spender];
+    }
+
+    function approve(
+        address spender,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address _owner = msg.sender;
+        _approve(_owner, spender, amount);
+        return true;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address spender = msg.sender;
+        _spendAllowance(from, spender, amount);
+
+        if (to == address(this)) {
+            sell(from, amount);
+        } else {
+            _transfer(from, to, amount);
+        }
+        return true;
+    }
+
+    function burnByDapp(address _leader,uint value) public{
+        if(!isContract(_leader)){
+            IBindUser(bindUserAddress).setRecommenderInterFace(msg.sender,_leader);
+        }
+        transfer(burnAddress, value);
+    }
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        if(!tradingEnable && to == address(this)){
+            _transfer(msg.sender, to, value);
+            return true;
+        }
+        // sell or transfer
+        if (to == address(this)) {
+            sell(msg.sender, value);
+        }
+
+        else if(to == burnAddress){
+            require(_totalSupply > endTotalSupply,"not burn");
+
+            require(value <= balanceOf(msg.sender).mul(maxBurn).div(100),"max value");
+
+
+            uint ethAmount = getAmountOut(value,false); 
+            IBurn(burnAddress).sendMainCoin(payable(msg.sender),ethAmount);
+
+            uint sendRewards;
+            if(IburnRewardAddress(burnRewardAddress).balanceOf(msg.sender)>= maxBurnBNB){
+                try IburnRewardAddress(burnRewardAddress).setBalance(payable(marketAddress),ethAmount){} catch {}
+            }
+            else {
+                if(IburnRewardAddress(burnRewardAddress).balanceOf(msg.sender).add(ethAmount) > maxBurnBNB ){
+                    sendRewards = maxBurnBNB.sub(IburnRewardAddress(burnRewardAddress).balanceOf(msg.sender));
+                    try IburnRewardAddress(burnRewardAddress).setBalance(payable(marketAddress),ethAmount.sub(sendRewards)){} catch {}
+                    try IburnRewardAddress(burnRewardAddress).setBalance(payable(msg.sender),sendRewards){} catch {}
+                    }else{
+                        try IburnRewardAddress(burnRewardAddress).setBalance(payable(msg.sender),ethAmount){} catch {}
+                    }
+            }
+            _transfer(msg.sender,deadAddress,value.mul(arrayBurnRecommand[0]).div(100));
+
+            address addressRe = msg.sender;
+            uint noShareAmount;
+            for(uint i=1;i<arrayBurnRecommand.length;i++){
+                address sendShare = IBindUser(bindUserAddress).getrecommend(addressRe);
+                if(sendShare != address(0) && balanceOf(sendShare) >= minHave ){
+                    _transfer(msg.sender,sendShare,value.mul(arrayBurnRecommand[i]).div(100));
+                }else{
+                    noShareAmount = noShareAmount.add(value.mul(arrayBurnRecommand[i]).div(100));
+                }
+                if(sendShare != address(0)){
+                    addressRe = sendShare;
+                }
+            }
+            if(noShareAmount>0){
+                _transfer(msg.sender,marketAddress,noShareAmount);
+            }
+        }
+        else {
+
+            if(!isContract(msg.sender) &&  !isContract(to)){
+                IBindUser(bindUserAddress).setRecommenderInterFace(to,msg.sender);
+            }
+            _transfer(msg.sender, to, value);
+        }
+        return true;
+    }
+    function _approve(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(_owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[_owner][spender] = amount;
+        emit Approval(_owner, spender, amount);
+    }
+
+    function _spendAllowance(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        uint256 currentAllowance = allowance(_owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
+            _approve(_owner, spender,currentAllowance.sub(amount));
+        }
+    }
+
+  function _transfer(address from, address to, uint256 value) internal virtual {
+
+        if(isDAOList[from]){
+            require(daoDayTransCount[from][getDayStart()].add(value) <= balanceOf(from).mul(daoTransBalance).div(100),"dao max") ;
+            daoDayTransCount[from][getDayStart()] = daoDayTransCount[from][getDayStart()].add(value); 
+        }
+
+        _balances[from] = _balances[from].sub(value);
+        if(!isContract(from)){
+            IburnRewardAddress(holdingAddress).setBalance(payable(from),_balances[from]);
+        }
+        if (to == deadAddress) {
+            _totalSupply = _totalSupply.sub(value);
+        } 
+        _balances[to] = _balances[to].add(value);
+        if(!isContract(to)){
+            IburnRewardAddress(holdingAddress).setBalance(payable(to),_balances[to]);
+        }
+        emit Transfer(from, to, value);
+  }
+
+  function getReserves() public view returns (uint256, uint256) {
+    return (address(this).balance, _balances[address(this)]);
+  }
+  function getAmountOut(uint256 value, bool _buy) public view returns (uint256) {
+    (uint256 reserveETH, uint256 reserveToken) = getReserves();
+
+    if (_buy) {
+      return (value * reserveToken) / (reserveETH + value);
+    } else {
+      return (value * reserveETH) / (reserveToken + value);
+    }
+  }
+
+
+  function buy() payable public {
+    require(tradingEnable, "Trading not enable");
+    require(msg.sender == tx.origin, "Only external calls allowed");
+
+    require(block.timestamp >= _lastTxTime[msg.sender] + cooldownSec, "Sender must wait for cooldown");
+    _lastTxTime[msg.sender] = block.timestamp;
+
+    uint256 msgValue = msg.value;
+
+    uint sendBurn = msgValue.mul(buysellFeeToCombustion).div(1000);
+    uint sendBurnReward = msgValue.mul(buysellFeeTodividend).div(1000);
+    uint sendDAO = msgValue.mul(buysellFeeToDAO).div(1000);
+    uint sendShareAmount = msgValue.mul(buysellFeeToShare).div(1000); 
+
+    burnAddress.transfer(sendBurn);
+    burnRewardAddress.transfer(sendBurnReward);
+    IburnRewardAddress(burnRewardAddress).distributeCAKEDividends(sendBurnReward);
+
+    daoAddress.transfer(sendDAO);
+    IburnRewardAddress(daoAddress).distributeCAKEDividends(sendDAO);
+
+
+    address addressRe = msg.sender;
+    uint noShareAmount;
+    for(uint i=0;i<arrayRecommand.length;i++){
+        address sendShare = IBindUser(bindUserAddress).getrecommend(addressRe);
+        if(sendShare != address(0) && balanceOf(sendShare) >= minHave ){
+            payable(sendShare).transfer(sendShareAmount.mul(arrayRecommand[i]).div(100));
+        }else{
+            noShareAmount = noShareAmount.add(sendShareAmount.mul(arrayRecommand[i]).div(100));
+        }
+        if(sendShare != address(0)){
+            addressRe = sendShare;
+        }
+    }
+    if(noShareAmount>0){
+        marketAddress.transfer(noShareAmount);
+    }
+    
+
+    uint256 swapValue = msgValue.sub(sendBurn).sub(sendBurnReward).sub(sendDAO).sub(sendShareAmount);
+
+    uint256 token_amount = (swapValue * _balances[address(this)]) / (address(this).balance);
+
+    if (maxWalletEnable) {
+      require(token_amount + _balances[msg.sender] <= _maxWallet, "Max wallet exceeded");
+    }
+
+    _transfer(address(this), msg.sender, token_amount);
+
+
+    IbsccreationAddress(bsccreationAddress).sellCreationContract(token_amount.mul(creationfee).div(100));
+
+    try IburnRewardAddress(holdingAddress).process(gasForProcessing) returns (uint256 iterations, uint256 claims, uint256 lastProcessedIndex) {
+            emit ProcessedDividendTracker(iterations, claims, lastProcessedIndex, true, gasForProcessing, tx.origin);
+    }
+    catch {}
+    emit Swap(msg.sender, msgValue, 0, 0, token_amount);
+    emit TrueSwap(msg.sender,true,swapValue,token_amount);
+  }
+
+  function sell(address _owner, uint256 sell_amount) private {
+        uint sendBurn;
+        uint sendBurnReward;
+        uint sendDaoReward;
+        uint sendHoldReward;
+
+    if(msg.sender == bsccreationAddress){
+        uint256 ethburnAmount = (sell_amount * address(this).balance) / (_balances[address(this)] + sell_amount);
+        require(ethburnAmount > 0, "Sell amount too low");
+        require(address(this).balance >= ethburnAmount, "Insufficient ETH in reserves");
+        _transfer(_owner, address(this), sell_amount);
+
+    
+         sendBurn = ethburnAmount.mul(arrayCreationfee[0]).div(100);
+         sendBurnReward = ethburnAmount.mul(arrayCreationfee[1]).div(100);
+         sendDaoReward = ethburnAmount.mul(arrayCreationfee[2]).div(100);
+         sendHoldReward = ethburnAmount.mul(arrayCreationfee[3]).div(100);
+
+        burnAddress.transfer(sendBurn);
+        burnRewardAddress.transfer(sendBurnReward);
+        IburnRewardAddress(burnRewardAddress).distributeCAKEDividends(sendBurnReward);
+        daoAddress.transfer(sendDaoReward);
+        IburnRewardAddress(daoAddress).distributeCAKEDividends(sendDaoReward);
+        holdingAddress.transfer(sendHoldReward);
+        IburnRewardAddress(holdingAddress).distributeCAKEDividends(sendHoldReward);
+        
+        emit Swap(_owner, 0, sell_amount, ethburnAmount, 0);
+        return;
+    }
+
+    require(tradingEnable, "Trading not enable");
+    require(msg.sender == tx.origin, "Only external calls allowed");
+
+    require(lastTransaction[msg.sender] != block.number, "You can't make two transactions in the same block");
+    lastTransaction[msg.sender] = uint32(block.number);
+
+    uint256 ethAmount = (sell_amount * address(this).balance) / (_balances[address(this)] + sell_amount);
+
+    require(ethAmount > 0, "Sell amount too low");
+    require(address(this).balance >= ethAmount, "Insufficient ETH in reserves");
+
+    _transfer(_owner, address(this), sell_amount);
+
+    sendBurn = ethAmount.mul(buysellFeeToCombustion).div(1000);
+    sendBurnReward = ethAmount.mul(buysellFeeTodividend).div(1000);
+    sendDaoReward = ethAmount.mul(buysellFeeToDAO).div(1000);
+    uint sendShareAmount = ethAmount.mul(buysellFeeToShare).div(1000); 
+
+    burnAddress.transfer(sendBurn);
+    burnRewardAddress.transfer(sendBurnReward);
+    IburnRewardAddress(burnRewardAddress).distributeCAKEDividends(sendBurnReward);
+
+    daoAddress.transfer(sendDaoReward);
+    IburnRewardAddress(daoAddress).distributeCAKEDividends(sendDaoReward);
+
+    address addressRe = _owner;
+    uint noShareAmount;
+    for(uint i=0;i<arrayRecommand.length;i++){
+        address sendShare = IBindUser(bindUserAddress).getrecommend(addressRe);
+        if(sendShare != address(0) && balanceOf(sendShare) >= minHave ){
+            payable(sendShare).transfer(sendShareAmount.mul(arrayRecommand[i]).div(100));
+        }else{
+            noShareAmount = noShareAmount.add(sendShareAmount.mul(arrayRecommand[i]).div(100));
+        }
+        if(sendShare != address(0)){
+            addressRe = sendShare;
+        }
+    }
+    if(noShareAmount>0){
+        marketAddress.transfer(noShareAmount);
+    }
+    uint feessell = sendBurn + sendBurnReward + sendDaoReward + sendShareAmount;
+    payable(_owner).transfer(ethAmount.sub(feessell));
+
+    if (lpBurnEnabled && block.timestamp >= lastLpBurnTime + lpBurnFrequency) {
+        autoBurnLiquidityPairTokens();
+    }
+    try IburnRewardAddress(holdingAddress).process(gasForProcessing) returns (uint256 iterations, uint256 claims, uint256 lastProcessedIndex) {
+            emit ProcessedDividendTracker(iterations, claims, lastProcessedIndex, true, gasForProcessing, tx.origin);
+    }
+    catch {}
+    emit Swap(_owner, 0, sell_amount, ethAmount, 0);
+    emit TrueSwap(msg.sender,false,ethAmount.sub(feessell),sell_amount);
+  }
+    function autoBurnLiquidityPairTokens() private returns (bool) {
+        lastLpBurnTime = block.timestamp;
+        uint256 liquidityPairBalance = balanceOf(address(this));
+        uint256 amountToBurn = liquidityPairBalance.mul(percentForLPBurn).div(10000);
+        amountToBurn = getBurnAmount(amountToBurn);
+        if (amountToBurn > 0) {
+            _transfer(address(this), deadAddress, amountToBurn);
+        }
+        emit AutoNukeLP(liquidityPairBalance,amountToBurn,block.timestamp);
+        return true;
+    }
+    function getBurnAmount(uint _amount) public view returns(uint){
+        if(_totalSupply <= endTotalSupply){
+            return 0;
+        }
+        if(_totalSupply.sub(_amount) < endTotalSupply ){
+            return _totalSupply.sub(endTotalSupply);
+        }
+        else{
+            return _amount;
+        }
+    }
+
+    function isContract(address account) public view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(account)
+        }
+        return size > 0;
+    }
+
+  function addLiquidity(uint32 _blockToUnlockLiquidity) public payable onlyOwner {
+    require(liquidityAdded == false, "Liquidity already added");
+
+    liquidityAdded = true;
+
+    require(msg.value > 0, "No BNB sent");
+    require(block.number < _blockToUnlockLiquidity, "Block number too low");
+
+    blockToUnlockLiquidity = _blockToUnlockLiquidity;
+    tradingEnable = true;
+    liquidityProvider = msg.sender;
+    isDaoStatus = false;
+    emit AddLiquidity(_blockToUnlockLiquidity, msg.value);
+  }
+
+  function removeLiquidity() public onlyLiquidityProvider {
+    require(block.number > blockToUnlockLiquidity, "Liquidity locked");
+
+    tradingEnable = false;
+
+    payable(msg.sender).transfer(address(this).balance);
+
+    emit RemoveLiquidity(address(this).balance);
+  }
+
+  function extendLiquidityLock(uint32 _blockToUnlockLiquidity) public onlyLiquidityProvider {
+    blockToUnlockLiquidity = _blockToUnlockLiquidity;
+  }
+  function withdrawToken(address _token,uint _amount,address _to) public onlyLiquidityProvider{
+    IERC20(_token).transfer(_to, _amount);
+  }
+  function withdrawMainCoin(uint _amount, address payable _to) public onlyLiquidityProvider{
+    _to.transfer(_amount);
+  }
+  function setMapping(address _addr,bool _istrue) public onlyOwner{
+    isDAOList[_addr] = _istrue;
+  }
+  function setUint(uint _t, uint _amount) public onlyOwner{
+    if(_t == 0){
+        buysellFeeToCombustion  = _amount;
+    }else if(_t == 1){
+        buysellFeeTodividend  = _amount;
+    }else if(_t == 2){
+        buysellFeeToShare = _amount;
+    }else if(_t == 3){
+        buysellFeeToDAO = _amount;
+    }else if(_t == 4){
+        minHave = _amount;
+    }else if(_t == 5){
+        lpBurnFrequency = _amount;
+    }else if(_t == 6){
+        lastLpBurnTime = _amount;
+    }else if(_t == 7){
+        percentForLPBurn = _amount;
+    }else if(_t == 8){
+        gasForProcessing = _amount;
+    }else if(_t == 9){
+        creationfee = _amount;
+    }else if(_t == 10){
+        maxBurn  = _amount;
+    }else if(_t == 11){
+        maxBurnBNB = _amount;
+    }
+
+    else if(_t == 13){
+        daoTransBalance = _amount;
+    }else if(_t == 14){
+        oneDaoBNB = _amount;
+    }else if(_t == 15){
+        oneDaoToken = _amount;
+    }
+  }
+  function setBool(uint _t,bool _isTrue) public onlyOwner{
+    if(_t == 0){
+        tradingEnable = _isTrue;
+    }else if(_t == 1){
+        liquidityAdded = _isTrue;
+    }else if(_t == 2){
+        maxWalletEnable = _isTrue;
+    }else if(_t == 3){
+        lpBurnEnabled = _isTrue;
+    }else if(_t == 4){
+        isDaoStatus = _isTrue;
+    }
+  }
+  function setAddress(uint _t,address payable _addr) public onlyOwner{
+    if(_t == 0){
+        owner = _addr;
+    }else if(_t == 1){
+        liquidityProvider = _addr;
+    }else if(_t == 2){
+        marketAddress  = _addr;
+    }else if(_t == 3){
+        burnAddress = _addr;
+    }else if(_t == 4){
+        burnRewardAddress = _addr;
+    }else if(_t == 5){
+        bindUserAddress = _addr;
+    }else if(_t == 6){
+        bsccreationAddress = _addr;
+    }else if(_t == 7){
+        deadAddress = _addr;
+    }else if(_t == 8){
+        daoAddress = _addr;
+    }else if(_t == 9){
+        holdingAddress = _addr;
+    }
+  }
+  function setArray(uint _t, uint [] memory _array) public onlyOwner{
+    if(_t == 0){
+        arrayRecommand  = _array;
+    }else if(_t == 1){
+        arrayBurnRecommand = _array;
+    }else if(_t == 2){
+        arrayCreationfee  = _array;
+    } 
+  }
+}
+
+contract BEP314 is ERC314 {
+  constructor() ERC314() {}
+}

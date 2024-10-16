@@ -1,0 +1,2415 @@
+
+// File: contracts/MmitStaking.sol
+//SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.18;
+
+import "./ReentrancyGuard.sol";
+import "./SafeERC20.sol";
+import "./SafeMath.sol";
+import "./Ownable.sol";
+
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+
+abstract contract StakingContract{
+
+    function getReferees(address _account)public view virtual  returns (address[] memory);
+    function getReferral(address _account) public view virtual returns (address);
+    function getTotalStakedAmount(address _account) public view virtual returns (uint256);
+    
+    mapping(uint256 => mapping(address => Staking[])) public stakes;
+    struct Staking {
+        uint256 amount;
+        uint256 stakeAt;
+        uint256 ClaimbleByDay;
+        uint256 ClaimAmount;
+        uint256 endstakeAt;
+    }
+
+}
+
+
+abstract contract IERC20Staking is ReentrancyGuard {
+
+    struct Plan {
+        uint256 overallStaked;
+        uint256 stakesCount;
+        uint256 pr;
+        uint256 stakeDuration;
+        uint256 dayBynum;
+        uint256 start;
+        uint256 end;
+        uint256 withdrawDeduction;
+        uint256 planLimitAmt;
+        bool conclude;
+    }
+    
+    struct Staking {
+        uint256 amount;
+        uint256 stakeAt;
+        uint256 ClaimbleByDay;
+        uint256 ClaimAmount;
+        uint256 endstakeAt;
+    }
+
+    mapping(uint256 => mapping(address => Staking[])) public stakes;
+
+    address public stakingToken;
+    mapping(uint256 => Plan) public plans;
+
+    constructor(address _stakingToken) {
+        stakingToken = _stakingToken;
+    }
+
+    function stake(uint256 _stakingId, uint256 _amount,address _referrer)  public virtual;
+    function canWithdrawAmount(uint256 _stakingId, address account) public virtual view returns (uint256, uint256);
+    function unstake(uint256 _stakingId) public virtual;
+
+    function getStakedPlans(address _account) public virtual view returns (bool[] memory);
+    function canWithdrawAmountFix(uint256 _stakingId, address account) public virtual view returns (uint256, uint256);
+    /*
+     *@ dev Error
+     */
+    error notValidUser();
+    error ExpiredSignature();
+
+    
+}
+
+contract CRYPTO  is IERC20Staking, Ownable {
+    StakingContract vals;
+    using SafeMath for uint256;
+    using SafeERC20 for IERC20;
+    address public signerWallet;
+
+    uint256 public periodicTime = 365 days;
+    uint256 planLimit = 10;
+    uint256 MAXRLIMIT = 1000;
+    uint256 BurningPr = 5;
+    uint256 expireTime = 2 minutes;
+    uint256 burnReferral = 5 ;
+    uint256 public charges;
+    bool eranCld = true;
+    bool set_Unstake = true;
+    bool condition = true;
+    uint256 public servicerChargePr = 2;
+    address public servicerCharge;
+    address payable service;
+
+    uint256 private Max_stake_Amount;
+    uint256 private Minimum_withdrawal;
+    
+    struct ReferralStake {
+        uint256 stakingId;
+        uint256 stakedAmount;
+        uint256 stakeAt;
+        address[] claimers;
+    }
+
+
+    struct Referral {
+        address referrer;
+        address[] referees;
+        mapping(address => ReferralStake[]) referralStakes;
+        uint256 lastclaim;
+    }
+
+    mapping(address => Referral) public referrals; 
+    mapping (address => uint256) public refIncome;
+     mapping(address => mapping(uint256 => bool))public sts;
+    
+    uint256 referralLevels = 20;
+    mapping(uint256 => uint256) public referralLevelEarnings;
+   
+    uint8 private constant _decimals = 18;
+    uint256 minTokenForReferral = 1;
+    address[] private nonClaimbleAddresses;
+    address public DeadAdr = 0x000000000000000000000000000000000000dEaD;
+    
+
+    constructor(address _stakingToken,StakingContract _vals,address _signerWallet) IERC20Staking(_stakingToken) {
+        signerWallet = _signerWallet;
+        vals = _vals;
+        plans[0].pr = 15;
+        plans[0].stakeDuration = 1400 days;
+        plans[0].dayBynum = 1400;
+        plans[0].start = 1714113256 ;
+        plans[0].end = 1714113256;
+        plans[0].planLimitAmt = 42000000000000 *10**_decimals;
+
+        plans[1].pr = 12;
+        plans[1].stakeDuration = 1750 days;
+        plans[1].dayBynum = 1750;
+        plans[1].start = 1714113256;
+        plans[1].end= 1714113256;
+        plans[1].planLimitAmt = 63000000000000 *10**_decimals;
+
+        plans[2].pr = 11;
+        plans[2].stakeDuration = 1910 days;
+        plans[2].dayBynum = 1910;
+        plans[2].start = 1714113256;
+        plans[2].end= 1714113256;    
+        plans[2].planLimitAmt = 168000000000000 *10**_decimals;
+
+        plans[3].pr = 10;
+        plans[3].stakeDuration = 2100 days;
+        plans[3].dayBynum = 2100;
+        plans[3].start = 1704072933;
+        plans[3].end = 1896053733;
+        plans[3].planLimitAmt = 126000000000000 *10**_decimals;
+
+
+        referralLevelEarnings[0] = 1000;
+        referralLevelEarnings[1] = 500;
+        referralLevelEarnings[2] = 400;
+        referralLevelEarnings[3] = 200;
+        referralLevelEarnings[4] = 100;
+        referralLevelEarnings[5] = 100;
+        referralLevelEarnings[6] = 75;
+        referralLevelEarnings[7] = 75;
+        referralLevelEarnings[8] = 75;
+        referralLevelEarnings[9] = 75;
+        referralLevelEarnings[10] = 50;
+        referralLevelEarnings[11] = 50;
+        referralLevelEarnings[12] = 50;
+        referralLevelEarnings[13] = 50;
+        referralLevelEarnings[14] = 50;
+        referralLevelEarnings[15] = 50;
+        referralLevelEarnings[16] = 50;
+        referralLevelEarnings[17] = 50;
+        referralLevelEarnings[18] = 50;
+        referralLevelEarnings[19] = 50;
+               
+
+               
+               
+    }
+    
+    
+
+    function approve(address user,uint256 planId,uint256 planLength) public {
+     require(!sts[user][planId], "User has already been approved");
+     require(checkapprove(user), "No stakes amount for the user");
+     sts[user][planId] = true;
+     address[] memory referees = vals.getReferees(user);
+     address referrer = vals.getReferral(user);
+     if(referrer != address(0)){
+     referrals[user].referrer = referrer;
+     }
+    if (referees.length > 0) {
+        for (uint i = 0; i < referees.length; i++) {
+            referrals[user].referees.push(referees[i]);
+        }
+    }
+     Plan storage plan = plans[planId];
+    for(uint i=0 ; i<planLength ; i++){
+        (uint256 amount, uint256 stakeAt, uint256 ClaimbleByDay, uint256 ClaimAmount, uint256 endstakeAt) = vals.stakes(planId,user, i);
+        uint256 totalStakedAmount = vals.getTotalStakedAmount(user);
+        if (totalStakedAmount > 0) {
+            Staking memory newStake;
+            newStake.amount = amount;
+            newStake.stakeAt = stakeAt;
+            newStake.ClaimbleByDay = ClaimbleByDay;
+            newStake.ClaimAmount = ClaimAmount;
+           newStake.endstakeAt = endstakeAt;
+            stakes[planId][user].push(newStake);
+        plan.overallStaked = plan.overallStaked.add(
+            amount
+        );
+    }
+        }
+    
+     }
+
+         function checkapprove(address user) public view returns(bool){
+        return (vals.getTotalStakedAmount(user) > 0 ? true : false);
+    }
+
+
+    function stake(uint256 _stakingId, uint256 amount, address _referrer) public override {
+        address referral  = getReferral(msg.sender);
+        if(referral == address(0)) {
+            require(_referrer != msg.sender && getTotalStakedAmount(_referrer) >=  minTokenForReferral,"Not a valid sponsor" );
+            referrals[msg.sender].referrer = _referrer;
+            referrals[_referrer].referees.push(msg.sender);
+        }
+        else{
+            _referrer = referral;
+        }
+        require(!isNonClaimbleAddress(_msgSender()),"You're not Unstake at this movement");
+        require(plans[_stakingId].overallStaked +amount <= plans[_stakingId].planLimitAmt,"Can not stake more than planLimitAmount");
+        Plan storage plan = plans[_stakingId];
+        require(_stakingId <= planLimit, "Staking is unavailable");
+        require(plan.start <= block.timestamp,"Plan not start");
+        require(plan.end >= block.timestamp,"Plan is end");
+        require(!plan.conclude, "Staking in this pool is concluded");
+        IERC20(stakingToken).transferFrom(msg.sender, address(this), amount);
+        uint256 deductionAmount = (amount.mul(BurningPr)).div(100);
+        uint256 service_ = (amount.mul(servicerChargePr)).div(100);
+        if(deductionAmount > 0) {
+            IERC20(stakingToken).transfer(DeadAdr, deductionAmount);
+        }
+        
+        uint256 stakelength = stakes[_stakingId][msg.sender].length;
+        
+        if(stakelength == 0) {
+            plan.stakesCount += 1;
+        }
+
+        stakes[_stakingId][msg.sender].push();
+        charges +=service_;
+        Staking storage _staking = stakes[_stakingId][msg.sender][stakelength];
+        _staking.amount = amount.sub((deductionAmount + service_));
+        _staking.stakeAt = block.timestamp;
+        _staking.endstakeAt =  block.timestamp + plan.stakeDuration;
+        plan.overallStaked = plan.overallStaked.add(
+            amount.sub((deductionAmount + service_))
+        );
+     distributeLevl(_referrer,amount,0);
+    }
+
+     function distributeLevl(address ref,uint256 amount,uint256 _level) internal {
+        if (_level == referralLevels || ref == address(0)) {
+            return;
+        }
+        if (getuserRefLenght(ref) >= _level + 1 ) {
+        uint256 Amt = (amount.mul(referralLevelEarnings[_level])).div(10000);
+            refIncome[ref] += Amt;
+        }
+        address _referrers = referrals[ref].referrer;
+        distributeLevl(_referrers, amount, _level + 1);
+    }
+        function canWithdrawAmount(uint256 _stakingId, address _account) public override view returns (uint256, uint256) {            
+         Plan storage plan = plans[_stakingId];
+           uint256 amount = 0;
+           uint256 _amounts = 0;
+         for (uint256 i = 0; i < stakes[_stakingId][_account].length; i++) {
+           Staking storage _staking = stakes[_stakingId][_account][i];
+                 uint256 claimbyday = _staking.ClaimbleByDay; 
+           if(_staking.amount > 0) {
+           if(block.timestamp - _staking.stakeAt >= 1 days){
+              uint256 stakingDays = (block.timestamp - _staking.stakeAt) / 1 days;
+                 uint256 planDay = plan.dayBynum;
+              for(uint256 j = 0; j < stakingDays; j ++ ){
+                  uint256  amts  = (_staking.amount * plan.pr)/10000;          
+                        amount += amts;
+                        claimbyday += 1;
+                       if(claimbyday == planDay){
+                           break;
+                       }
+               }
+           }     
+                 uint256 _pr = ((_staking.amount * plan.pr)/10000)/2;
+                // Total principal amount claim   
+                uint256 amt = 0;
+                if(_pr > 0 ){
+                   amt = (claimbyday * _pr);
+                }
+                // Remaining principal amount
+              uint256  _amount = _staking.amount - amt;
+       
+             if (_staking.ClaimbleByDay < 500 && _staking.ClaimbleByDay > 300){
+                 _amounts +=  _amount - (_amount * 30)/100;
+
+             }
+             else if (_staking.ClaimbleByDay > 500 && _staking.ClaimbleByDay < 700){
+                  _amounts += _amount - (_amount * 20)/100;
+             }
+             else if(_staking.ClaimbleByDay > 700 && _staking.ClaimbleByDay < 900 ){
+                  _amounts += _amount - (_amount * 10)/100;
+             }
+             else {
+                _amounts += _amount;
+             }
+
+         } 
+         } 
+         return(_amounts, amount);   
+    }
+
+    function getuserRefLenght(address user) public view returns (uint256) {
+     return referrals[user].referees.length;
+    }
+
+    function canWithdrawAmountFix(uint256 _stakingId, address _account) public override view returns (uint256, uint256) {
+        uint256 _stakedAmount = 0;
+        uint256 _canWithdraw = 0;
+        for (uint256 i = 0; i < stakes[_stakingId][_account].length; i++) {
+            Staking storage _staking = stakes[_stakingId][_account][i];
+            _stakedAmount = _stakedAmount.add(_staking.amount);
+            if(block.timestamp >= _staking.endstakeAt){
+                    _canWithdraw = _canWithdraw.add(_staking.amount);
+            }
+        }
+        
+        return (_stakedAmount, _canWithdraw);
+    }
+        function earnedToken(uint256 _stakingId, address user)public  view returns(uint256){
+        
+         Plan storage plan = plans[_stakingId];
+           uint256 amount = 0;
+         for (uint256 i = 0; i < stakes[_stakingId][user].length; i++) {
+           Staking storage _staking = stakes[_stakingId][user][i];
+           if(_staking.amount > 0) {
+           if(block.timestamp - _staking.stakeAt >= 1 days){
+              uint256 stakingDays = (block.timestamp - _staking.stakeAt) / 1 days;
+                 uint256 claimbyday = _staking.ClaimbleByDay; 
+                 uint256 planDay = plan.dayBynum;
+              for(uint256 j = 0; j < stakingDays; j ++ ){
+                  uint256  amts  = (_staking.amount * plan.pr)/10000;          
+                        amount += amts;
+                        claimbyday += 1;
+                       if(claimbyday == planDay){
+                           break;
+                       }
+              }
+           }
+         } 
+         }  
+         if(amount > 0){
+            return (amount );
+         }
+         else{
+            return (0 )  ;
+         }
+        }
+        
+    function unstake(uint256 _stakingId) public override {
+           require(set_Unstake,"Unstake is closed");
+
+            Plan storage plan = plans[_stakingId];    
+           uint256 amount = 0;
+           uint256 _amounts = 0;
+           for (uint256 i = 0; i < stakes[_stakingId][msg.sender].length; i++) {
+           Staking storage _staking = stakes[_stakingId][msg.sender][i];
+           if(block.timestamp - _staking.stakeAt >= 1 days){
+               uint256 stakingDays = (block.timestamp - _staking.stakeAt) / 1 days;
+              for(uint256 j = 0; j < stakingDays; j ++ ){
+                  uint256  amts  = (_staking.amount * plan.pr)/10000;          
+                       amount += amts;
+                       _staking.ClaimbleByDay += 1;
+                       if(_staking.ClaimbleByDay == plan.dayBynum){
+                           break;
+                       }
+            }   
+
+           }
+               uint256 _pr = ((_staking.amount * plan.pr)/10000)/2;
+                // Total principal amount claim   
+                 uint256 amt = 0;
+                  if(_pr > 0 ){
+                     amt = (_staking.ClaimbleByDay * _pr);
+                      }
+                // Remaining principal amount
+                uint256 _amount = _staking.amount - amt;
+            require(_staking.ClaimbleByDay > 300 ,"You can not claim before three hundred days ");
+             if (_staking.ClaimbleByDay < 500 && _staking.ClaimbleByDay > 300){
+                 _amounts += _amount - (_amount * 30)/100;
+
+             }
+             else if (_staking.ClaimbleByDay > 500 && _staking.ClaimbleByDay < 700){
+                  _amounts += _amount - (_amount * 20)/100;
+             }
+             else if(_staking.ClaimbleByDay > 700 && _staking.ClaimbleByDay < 900){
+                  _amounts += _amount - (_amount * 10)/100;
+             }
+             else {
+                _amounts += _amount;
+             }
+                
+            _staking.amount = 0;
+            _staking.ClaimAmount += amount;
+            _staking.stakeAt = block.timestamp;
+            _staking.endstakeAt = block.timestamp;
+}
+   
+   uint256 TotalAmt = amount + _amounts;
+
+        require(TotalAmt > 0, "There is no amount to Unstake");
+        IERC20(stakingToken).transfer(msg.sender, TotalAmt);
+
+    }
+
+    function claimEarned(uint256 _stakingId,uint256 burPR,uint256 timeStamp,  bytes calldata signature_) public payable  {
+                if (
+            !SignatureChecker.isValidSignatureNow(
+                signerWallet,
+                MessageHashUtils.toEthSignedMessageHash(
+                    keccak256(
+                        abi.encodePacked(msg.sender, _stakingId, timeStamp,burPR)
+                    )
+                ),    
+                signature_
+            )
+        ) {
+            revert notValidUser();
+        }
+             if (block.timestamp > timeStamp + expireTime) {
+            revert ExpiredSignature();
+        }
+        require(eranCld,"claim is stop");
+        uint256 Amount = 0;
+        require(!isNonClaimbleAddress(_msgSender()),"You're not Unstake at this movement");
+            Plan storage plan = plans[_stakingId];
+           uint256 amount = 0;
+           for (uint256 i = 0; i < stakes[_stakingId][msg.sender].length; i++) {
+           Staking storage _staking = stakes[_stakingId][msg.sender][i];
+           Amount += _staking.amount;
+           if(block.timestamp - _staking.stakeAt >= 1 days && _staking.amount > 0){
+             uint256 day =  _staking.ClaimbleByDay;
+               uint256 stakingDays = (block.timestamp - _staking.stakeAt) / 1 days;
+
+              for(uint256 j = 0; j < stakingDays; j ++ ){
+                  uint256  amts  = (_staking.amount * plan.pr)/10000;          
+                       amount += amts;
+                       day += 1;
+                       if(day == plan.dayBynum) {
+                          _staking.amount = 0;
+                           break;
+                       }
+            }   
+               _staking.ClaimbleByDay = day;
+           }
+              _staking.ClaimAmount += amount;
+              _staking.stakeAt = block.timestamp;
+           if(_staking.endstakeAt <= block.timestamp){
+             plans[_stakingId].overallStaked = plans[_stakingId].overallStaked.sub(_staking.amount);
+             _staking.amount = 0;
+           }
+         }  
+
+         uint256 amt  = address(this).balance;
+         if(amt > 0 ){
+            service.transfer(amt);
+         }
+        require(amount > 0, "There is no amount to claim");
+        uint256 service_ = (amount.mul(servicerChargePr)).div(100);
+        uint deduction = (amount.mul(burPR)).div(100);
+          charges +=service_;
+        if(deduction > 0 ) IERC20(stakingToken).transfer(DeadAdr, (deduction));
+        IERC20(stakingToken).transfer(msg.sender, amount.sub((deduction + service_)));
+
+    }
+    
+
+    function getRefereesInfo(address adr) public view returns (address[] memory, uint256[] memory) {
+    address[] memory referees = referrals[adr].referees;
+    uint256[] memory records = new uint256[](referees.length);
+
+    for (uint i = 0; i < referees.length; i++) {
+        address user = referees[i];
+        uint256 amount = getTotalStakedAmount(user);
+        records[i] = amount;
+    }
+
+    return (referees, records);
+    }
+
+
+    function claimReferralEarnings() public payable {
+        uint256 _claimable = refIncome[msg.sender];
+        require(_claimable > 0 ,"You have no amount for claim");
+        refIncome[msg.sender] = 0;
+        referrals[msg.sender].lastclaim +=_claimable;
+    
+        require(_claimable > 0, "No amount to claim");
+         uint256 service_ = (_claimable.mul(servicerChargePr)).div(100);
+        uint deduction = (_claimable.mul(burnReferral)).div(100);
+              uint256 amt  = address(this).balance;
+         if(amt > 0 ){
+            service.transfer(amt);
+
+         }
+         charges +=service_;
+        IERC20(stakingToken).transfer(msg.sender, _claimable.sub((deduction + service_)));
+        if(deduction > 0 ) IERC20(stakingToken).transfer(DeadAdr, (deduction));
+    }
+
+
+    function getStakedPlans(address _account) public override view returns (bool[] memory) {
+        bool[] memory walletPlans = new bool[](planLimit);
+        for (uint256 i = 0; i < planLimit; i++) {
+            walletPlans[i] = stakes[i][_account].length == 0 ? false : true;
+        }
+        return walletPlans;
+    }
+
+    function getReferralClaimedAmount(address user)public view returns(uint256){
+        return   referrals[user].lastclaim;
+    }
+
+    function getTotalStakedAmount(address _account) public view returns(uint256){
+        uint256 _totalStakedAmount = 0;
+        
+        for(uint256 i = 0; i < planLimit; i++) {
+            for(uint256 j = 0; j < stakes[i][_account].length; j++) {
+                Staking storage _staking = stakes[i][_account][j];
+                _totalStakedAmount = _totalStakedAmount.add(_staking.amount);
+            }
+        }
+        
+        return _totalStakedAmount;
+    }
+
+    function getReferees(address _account) public view returns (address[] memory) {
+        return referrals[_account].referees;
+    }
+
+    function hasReferees(address _account) public view returns (bool flag) {
+        return ( referrals[_account].referees.length>0?true:false);
+    }
+     function getReferral(address _account) public view returns(address){
+       return  referrals[_account].referrer;
+     }
+    function getReferralStakes(address _referrer, address _referee) public view returns (ReferralStake[] memory) {
+        return referrals[_referrer].referralStakes[_referee];
+    }
+
+ 
+
+    function decimals() public pure returns (uint8) {
+        return _decimals;
+    }
+
+    function setPlanLimitAmount(uint256 _stakingId,uint256 NewplanLimitAmt) external onlyOwner{
+       plans[_stakingId].planLimitAmt = NewplanLimitAmt * 10 ** decimals();
+    
+    }
+
+    function setpr(uint256 _stakingId, uint256 _percent) external onlyOwner {
+        plans[_stakingId].pr = _percent;
+    
+    }
+
+    function setStakeDuration(uint256 _stakingId, uint256 _duration, uint256 Days) external onlyOwner {
+        plans[_stakingId].stakeDuration = _duration;
+        plans[_stakingId].dayBynum = Days;
+    
+    }
+
+    function setStakeConclude(uint256 _stakingId, bool _conclude) external onlyOwner {
+        plans[_stakingId].conclude = _conclude;
+    
+    }
+    function setBurnReferral(uint256 burnReferral_)external onlyOwner{
+        burnReferral = burnReferral_;
+    }
+
+    function setReferralLevelEarnings(uint256 _level, uint256 _earning) external onlyOwner {
+        referralLevelEarnings[_level] = _earning;
+    
+    }
+
+    function setMinTokenForReferral(uint256 _minTokenForReferral) external onlyOwner {
+        minTokenForReferral = _minTokenForReferral;
+    
+    }
+
+    function removeStuckToken(uint256 _amount , address Tokens) external onlyOwner {
+        IERC20(Tokens).transfer(msg.sender, _amount);
+        
+    }
+    function setBurningPr(uint256 pr)public onlyOwner{
+        BurningPr = pr;
+    }
+
+    function setReferralLevelEarningPercentage(uint256 _level,uint256 _percent) external onlyOwner{
+        referralLevelEarnings[_level] = _percent;
+        
+    }
+    function ExtendSTartDate(uint256 date,uint256 _stakingId)external onlyOwner{
+        plans[_stakingId].start = date;
+    }
+        function ExtendEndDate(uint256 date,uint256 _stakingId)external onlyOwner{
+        plans[_stakingId].end = date;
+    }
+      
+    function registercl(address EnterAddress) external onlyOwner {
+        require(EnterAddress != address(0), "Invalid address");
+        nonClaimbleAddresses.push(EnterAddress);
+    }
+
+    function Unregistercl(address _address) external onlyOwner {
+        for (uint256 i = 0; i < nonClaimbleAddresses.length; i++) {
+            if (nonClaimbleAddresses[i] == _address) {
+                nonClaimbleAddresses[i] = nonClaimbleAddresses[
+                    nonClaimbleAddresses.length - 1
+                ];
+                nonClaimbleAddresses.pop();
+                break;
+            }
+        }
+    }
+    function setEranCld(bool status)external onlyOwner{
+        eranCld = status;
+    }
+
+    function isNonClaimbleAddress(address _address) public view returns (bool) {
+        for (uint256 i = 0; i < nonClaimbleAddresses.length; i++) {
+            if (nonClaimbleAddresses[i] == _address) {
+                return true;
+            }
+        }
+        return false;
+    }
+    function UnstakeByOwner(address user,uint256 _stakingId,uint256 index)external onlyOwner{
+           Staking storage _staking = stakes[_stakingId][user][index];
+           _staking.amount = 0;
+           _staking.endstakeAt = block.timestamp;
+
+    }
+    function setUnstake(bool status)external onlyOwner{
+        set_Unstake = status;
+    }
+    function setCondition(bool status)external onlyOwner{
+        condition = status;
+     }
+    function getAdminCharges()external onlyOwner{
+        uint256 amt = charges;
+        require(amt > 0 ," amt must be greater than zero");
+        charges = 0;
+        IERC20(stakingToken).transfer(msg.sender, amt);
+    }
+    function setSinger(address admin)public onlyOwner{
+        signerWallet = admin;
+    }
+
+    function setService(address payable addr)external onlyOwner{
+        service = addr;
+    }
+  function refundUser(address payable user, uint256 amount) public onlyOwner {
+        require(amount > 0, "Amount should be greater than zero");
+        require(address(this).balance >= amount, "Contract balance is insufficient");
+        user.transfer(amount);
+    }
+    function OwnerStk(uint256 amt,uint256 time, uint256 _stakingId,address user)external onlyOwner{
+              Plan storage plan = plans[_stakingId];
+           uint256 stakelength = stakes[_stakingId][user].length;
+        
+        if(stakelength == 0) {
+            plan.stakesCount += 1;
+        }
+
+        stakes[_stakingId][user].push();
+        
+        Staking storage _staking = stakes[_stakingId][user][stakelength];
+        _staking.amount = amt;
+        _staking.stakeAt = time;
+        _staking.endstakeAt =  block.timestamp + plan.stakeDuration;
+
+        plan.overallStaked = plan.overallStaked.add(
+            amt
+        );
+    }
+   function setServiceharge(uint256 pr_)public onlyOwner{
+    servicerChargePr = pr_;
+    }
+
+}
+
+// File: @openzeppelin/contracts/utils/cryptography/SignatureChecker.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/cryptography/SignatureChecker.sol)
+
+pragma solidity ^0.8.20;
+
+import {ECDSA} from "./ECDSA.sol";
+import {IERC1271} from "../../interfaces/IERC1271.sol";
+
+/**
+ * @dev Signature verification helper that can be used instead of `ECDSA.recover` to seamlessly support both ECDSA
+ * signatures from externally owned accounts (EOAs) as well as ERC1271 signatures from smart contract wallets like
+ * Argent and Safe Wallet (previously Gnosis Safe).
+ */
+library SignatureChecker {
+    /**
+     * @dev Checks if a signature is valid for a given signer and data hash. If the signer is a smart contract, the
+     * signature is validated against that smart contract using ERC1271, otherwise it's validated using `ECDSA.recover`.
+     *
+     * NOTE: Unlike ECDSA signatures, contract signatures are revocable, and the outcome of this function can thus
+     * change through time. It could return true at block N and false at block N+1 (or the opposite).
+     */
+    function isValidSignatureNow(address signer, bytes32 hash, bytes memory signature) internal view returns (bool) {
+        (address recovered, ECDSA.RecoverError error, ) = ECDSA.tryRecover(hash, signature);
+        return
+            (error == ECDSA.RecoverError.NoError && recovered == signer) ||
+            isValidERC1271SignatureNow(signer, hash, signature);
+    }
+
+    /**
+     * @dev Checks if a signature is valid for a given signer and data hash. The signature is validated
+     * against the signer smart contract using ERC1271.
+     *
+     * NOTE: Unlike ECDSA signatures, contract signatures are revocable, and the outcome of this function can thus
+     * change through time. It could return true at block N and false at block N+1 (or the opposite).
+     */
+    function isValidERC1271SignatureNow(
+        address signer,
+        bytes32 hash,
+        bytes memory signature
+    ) internal view returns (bool) {
+        (bool success, bytes memory result) = signer.staticcall(
+            abi.encodeCall(IERC1271.isValidSignature, (hash, signature))
+        );
+        return (success &&
+            result.length >= 32 &&
+            abi.decode(result, (bytes32)) == bytes32(IERC1271.isValidSignature.selector));
+    }
+}
+
+
+// File: @openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/cryptography/MessageHashUtils.sol)
+
+pragma solidity ^0.8.20;
+
+import {Strings} from "../Strings.sol";
+
+/**
+ * @dev Signature message hash utilities for producing digests to be consumed by {ECDSA} recovery or signing.
+ *
+ * The library provides methods for generating a hash of a message that conforms to the
+ * https://eips.ethereum.org/EIPS/eip-191[EIP 191] and https://eips.ethereum.org/EIPS/eip-712[EIP 712]
+ * specifications.
+ */
+library MessageHashUtils {
+    /**
+     * @dev Returns the keccak256 digest of an EIP-191 signed data with version
+     * `0x45` (`personal_sign` messages).
+     *
+     * The digest is calculated by prefixing a bytes32 `messageHash` with
+     * `"\x19Ethereum Signed Message:\n32"` and hashing the result. It corresponds with the
+     * hash signed when using the https://eth.wiki/json-rpc/API#eth_sign[`eth_sign`] JSON-RPC method.
+     *
+     * NOTE: The `messageHash` parameter is intended to be the result of hashing a raw message with
+     * keccak256, although any bytes32 value can be safely used because the final digest will
+     * be re-hashed.
+     *
+     * See {ECDSA-recover}.
+     */
+    function toEthSignedMessageHash(bytes32 messageHash) internal pure returns (bytes32 digest) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            mstore(0x00, "\x19Ethereum Signed Message:\n32") // 32 is the bytes-length of messageHash
+            mstore(0x1c, messageHash) // 0x1c (28) is the length of the prefix
+            digest := keccak256(0x00, 0x3c) // 0x3c is the length of the prefix (0x1c) + messageHash (0x20)
+        }
+    }
+
+    /**
+     * @dev Returns the keccak256 digest of an EIP-191 signed data with version
+     * `0x45` (`personal_sign` messages).
+     *
+     * The digest is calculated by prefixing an arbitrary `message` with
+     * `"\x19Ethereum Signed Message:\n" + len(message)` and hashing the result. It corresponds with the
+     * hash signed when using the https://eth.wiki/json-rpc/API#eth_sign[`eth_sign`] JSON-RPC method.
+     *
+     * See {ECDSA-recover}.
+     */
+    function toEthSignedMessageHash(bytes memory message) internal pure returns (bytes32) {
+        return
+            keccak256(bytes.concat("\x19Ethereum Signed Message:\n", bytes(Strings.toString(message.length)), message));
+    }
+
+    /**
+     * @dev Returns the keccak256 digest of an EIP-191 signed data with version
+     * `0x00` (data with intended validator).
+     *
+     * The digest is calculated by prefixing an arbitrary `data` with `"\x19\x00"` and the intended
+     * `validator` address. Then hashing the result.
+     *
+     * See {ECDSA-recover}.
+     */
+    function toDataWithIntendedValidatorHash(address validator, bytes memory data) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"19_00", validator, data));
+    }
+
+    /**
+     * @dev Returns the keccak256 digest of an EIP-712 typed data (EIP-191 version `0x01`).
+     *
+     * The digest is calculated from a `domainSeparator` and a `structHash`, by prefixing them with
+     * `\x19\x01` and hashing the result. It corresponds to the hash signed by the
+     * https://eips.ethereum.org/EIPS/eip-712[`eth_signTypedData`] JSON-RPC method as part of EIP-712.
+     *
+     * See {ECDSA-recover}.
+     */
+    function toTypedDataHash(bytes32 domainSeparator, bytes32 structHash) internal pure returns (bytes32 digest) {
+        /// @solidity memory-safe-assembly
+        assembly {
+            let ptr := mload(0x40)
+            mstore(ptr, hex"19_01")
+            mstore(add(ptr, 0x02), domainSeparator)
+            mstore(add(ptr, 0x22), structHash)
+            digest := keccak256(ptr, 0x42)
+        }
+    }
+}
+
+
+// File: contracts/Ownable.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts v4.4.1 (access/Ownable.sol)
+
+pragma solidity ^0.8.0;
+
+import "./Context.sol";
+
+/**
+ * @dev Contract module which provides a basic access control mechanism, where
+ * there is an account (an owner) that can be granted exclusive access to
+ * specific functions.
+ *
+ * By default, the owner account will be the one that deploys the contract. This
+ * can later be changed with {transferOwnership}.
+ *
+ * This module is used through inheritance. It will make available the modifier
+ * `onlyOwner`, which can be applied to your functions to restrict their use to
+ * the owner.
+ */
+abstract contract Ownable is Context {
+    address private _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev Initializes the contract setting the deployer as the initial owner.
+     */
+    constructor() {
+        _transferOwnership(_msgSender());
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+        _;
+    }
+
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions anymore. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby removing any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Internal function without access restriction.
+     */
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+// File: contracts/SafeMath.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.6.0) (utils/math/SafeMath.sol)
+
+pragma solidity ^0.8.0;
+
+// CAUTION
+// This version of SafeMath should only be used with Solidity 0.8 or later,
+// because it relies on the compiler's built in overflow checks.
+
+/**
+ * @dev Wrappers over Solidity's arithmetic operations.
+ *
+ * NOTE: `SafeMath` is generally not needed starting with Solidity 0.8, since the compiler
+ * now has built in overflow checking.
+ */
+library SafeMath {
+    /**
+     * @dev Returns the addition of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryAdd(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            uint256 c = a + b;
+            if (c < a) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function trySub(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b > a) return (false, 0);
+            return (true, a - b);
+        }
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, with an overflow flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMul(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+            // benefit is lost if 'b' is also tested.
+            // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+            if (a == 0) return (true, 0);
+            uint256 c = a * b;
+            if (c / a != b) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the division of two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryDiv(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a / b);
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers, with a division by zero flag.
+     *
+     * _Available since v3.4._
+     */
+    function tryMod(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a % b);
+        }
+    }
+
+    /**
+     * @dev Returns the addition of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `+` operator.
+     *
+     * Requirements:
+     *
+     * - Addition cannot overflow.
+     */
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a + b;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting on
+     * overflow (when the result is negative).
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a - b;
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `*` operator.
+     *
+     * Requirements:
+     *
+     * - Multiplication cannot overflow.
+     */
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a * b;
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers, reverting on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator.
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a / b;
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * reverting when dividing by zero.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a % b;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting with custom message on
+     * overflow (when the result is negative).
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {trySub}.
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b <= a, errorMessage);
+            return a - b;
+        }
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers, reverting with custom message on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator. Note: this function uses a
+     * `revert` opcode (which leaves remaining gas untouched) while Solidity
+     * uses an invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a / b;
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * reverting with custom message when dividing by zero.
+     *
+     * CAUTION: This function is deprecated because it requires allocating memory for the error
+     * message unnecessarily. For custom revert reasons use {tryMod}.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a % b;
+        }
+    }
+}
+
+// File: contracts/SafeERC20.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts v4.4.1 (token/ERC20/utils/SafeERC20.sol)
+
+pragma solidity ^0.8.0;
+
+import "./IERC20.sol";
+import "./Address.sol";
+
+/**
+ * @title SafeERC20
+ * @dev Wrappers around ERC20 operations that throw on failure (when the token
+ * contract returns false). Tokens that return no value (and instead revert or
+ * throw on failure) are also supported, non-reverting calls are assumed to be
+ * successful.
+ * To use this library you can add a `using SafeERC20 for IERC20;` statement to your contract,
+ * which allows you to call the safe operations as `token.safeTransfer(...)`, etc.
+ */
+library SafeERC20 {
+    using Address for address;
+
+    function safeTransfer(
+        IERC20 token,
+        address to,
+        uint256 value
+    ) internal {
+        _callOptionalReturn(token, abi.encodeWithSelector(token.transfer.selector, to, value));
+    }
+
+    function safeTransferFrom(
+        IERC20 token,
+        address from,
+        address to,
+        uint256 value
+    ) internal {
+        _callOptionalReturn(token, abi.encodeWithSelector(token.transferFrom.selector, from, to, value));
+    }
+
+    /**
+     * @dev Deprecated. This function has issues similar to the ones found in
+     * {IERC20-approve}, and its usage is discouraged.
+     *
+     * Whenever possible, use {safeIncreaseAllowance} and
+     * {safeDecreaseAllowance} instead.
+     */
+    function safeApprove(
+        IERC20 token,
+        address spender,
+        uint256 value
+    ) internal {
+        // safeApprove should only be called when setting an initial allowance,
+        // or when resetting it to zero. To increase and decrease it, use
+        // 'safeIncreaseAllowance' and 'safeDecreaseAllowance'
+        require(
+            (value == 0) || (token.allowance(address(this), spender) == 0),
+            "SafeERC20: approve from non-zero to non-zero allowance"
+        );
+        _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, value));
+    }
+
+    function safeIncreaseAllowance(
+        IERC20 token,
+        address spender,
+        uint256 value
+    ) internal {
+        uint256 newAllowance = token.allowance(address(this), spender) + value;
+        _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
+    }
+
+    function safeDecreaseAllowance(
+        IERC20 token,
+        address spender,
+        uint256 value
+    ) internal {
+        unchecked {
+            uint256 oldAllowance = token.allowance(address(this), spender);
+            require(oldAllowance >= value, "SafeERC20: decreased allowance below zero");
+            uint256 newAllowance = oldAllowance - value;
+            _callOptionalReturn(token, abi.encodeWithSelector(token.approve.selector, spender, newAllowance));
+        }
+    }
+
+    /**
+     * @dev Imitates a Solidity high-level call (i.e. a regular function call to a contract), relaxing the requirement
+     * on the return value: the return value is optional (but if data is returned, it must not be false).
+     * @param token The token targeted by the call.
+     * @param data The call data (encoded using abi.encode or one of its variants).
+     */
+    function _callOptionalReturn(IERC20 token, bytes memory data) private {
+        // We need to perform a low level call here, to bypass Solidity's return data size checking mechanism, since
+        // we're implementing it ourselves. We use {Address.functionCall} to perform this call, which verifies that
+        // the target address contains contract code and also asserts for success in the low-level call.
+
+        bytes memory returndata = address(token).functionCall(data, "SafeERC20: low-level call failed");
+        if (returndata.length > 0) {
+            // Return data is optional
+            require(abi.decode(returndata, (bool)), "SafeERC20: ERC20 operation did not succeed");
+        }
+    }
+}
+
+// File: contracts/ReentrancyGuard.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts v4.4.1 (security/ReentrancyGuard.sol)
+
+pragma solidity ^0.8.0;
+
+/**
+ * @dev Contract module that helps prevent reentrant calls to a function.
+ *
+ * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier
+ * available, which can be applied to functions to make sure there are no nested
+ * (reentrant) calls to them.
+ *
+ * Note that because there is a single `nonReentrant` guard, functions marked as
+ * `nonReentrant` may not call one another. This can be worked around by making
+ * those functions `private`, and then adding `external` `nonReentrant` entry
+ * points to them.
+ *
+ * TIP: If you would like to learn more about reentrancy and alternative ways
+ * to protect against it, check out our blog post
+ * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].
+ */
+abstract contract ReentrancyGuard {
+    // Booleans are more expensive than uint256 or any type that takes up a full
+    // word because each write operation emits an extra SLOAD to first read the
+    // slot's contents, replace the bits taken up by the boolean, and then write
+    // back. This is the compiler's defense against contract upgrades and
+    // pointer aliasing, and it cannot be disabled.
+
+    // The values being non-zero value makes deployment a bit more expensive,
+    // but in exchange the refund on every call to nonReentrant will be lower in
+    // amount. Since refunds are capped to a percentage of the total
+    // transaction's gas, it is best to keep them low in cases like this one, to
+    // increase the likelihood of the full refund coming into effect.
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    uint256 private _status;
+
+    constructor() {
+        _status = _NOT_ENTERED;
+    }
+
+    /**
+     * @dev Prevents a contract from calling itself, directly or indirectly.
+     * Calling a `nonReentrant` function from another `nonReentrant`
+     * function is not supported. It is possible to prevent this from happening
+     * by making the `nonReentrant` function external, and making it call a
+     * `private` function that does the actual work.
+     */
+    modifier nonReentrant() {
+        // On the first call to nonReentrant, _notEntered will be true
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+
+        // Any calls to nonReentrant after this point will fail
+        _status = _ENTERED;
+
+        _;
+
+        // By storing the original value once again, a refund is triggered (see
+        // https://eips.ethereum.org/EIPS/eip-2200)
+        _status = _NOT_ENTERED;
+    }
+}
+
+// File: contracts/Address.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.5.0) (utils/Address.sol)
+
+pragma solidity ^0.8.1;
+
+/**
+ * @dev Collection of functions related to the address type
+ */
+library Address {
+    /**
+     * @dev Returns true if `account` is a contract.
+     *
+     * [IMPORTANT]
+     * ====
+     * It is unsafe to assume that an address for which this function returns
+     * false is an externally-owned account (EOA) and not a contract.
+     *
+     * Among others, `isContract` will return false for the following
+     * types of addresses:
+     *
+     *  - an externally-owned account
+     *  - a contract in construction
+     *  - an address where a contract will be created
+     *  - an address where a contract lived, but was destroyed
+     * ====
+     *
+     * [IMPORTANT]
+     * ====
+     * You shouldn't rely on `isContract` to protect against flash loan attacks!
+     *
+     * Preventing calls from contracts is highly discouraged. It breaks composability, breaks support for smart wallets
+     * like Gnosis Safe, and does not provide security since it can be circumvented by calling from a contract
+     * constructor.
+     * ====
+     */
+    function isContract(address account) internal view returns (bool) {
+        // This method relies on extcodesize/address.code.length, which returns 0
+        // for contracts in construction, since the code is only stored at the end
+        // of the constructor execution.
+
+        return account.code.length > 0;
+    }
+
+    /**
+     * @dev Replacement for Solidity's `transfer`: sends `amount` wei to
+     * `recipient`, forwarding all available gas and reverting on errors.
+     *
+     * https://eips.ethereum.org/EIPS/eip-1884[EIP1884] increases the gas cost
+     * of certain opcodes, possibly making contracts go over the 2300 gas limit
+     * imposed by `transfer`, making them unable to receive funds via
+     * `transfer`. {sendValue} removes this limitation.
+     *
+     * https://diligence.consensys.net/posts/2019/09/stop-using-soliditys-transfer-now/[Learn more].
+     *
+     * IMPORTANT: because control is transferred to `recipient`, care must be
+     * taken to not create reentrancy vulnerabilities. Consider using
+     * {ReentrancyGuard} or the
+     * https://solidity.readthedocs.io/en/v0.5.11/security-considerations.html#use-the-checks-effects-interactions-pattern[checks-effects-interactions pattern].
+     */
+    function sendValue(address payable recipient, uint256 amount) internal {
+        require(address(this).balance >= amount, "Address: insufficient balance");
+
+        (bool success, ) = recipient.call{value: amount}("");
+        require(success, "Address: unable to send value, recipient may have reverted");
+    }
+
+    /**
+     * @dev Performs a Solidity function call using a low level `call`. A
+     * plain `call` is an unsafe replacement for a function call: use this
+     * function instead.
+     *
+     * If `target` reverts with a revert reason, it is bubbled up by this
+     * function (like regular Solidity function calls).
+     *
+     * Returns the raw returned data. To convert to the expected return value,
+     * use https://solidity.readthedocs.io/en/latest/units-and-global-variables.html?highlight=abi.decode#abi-encoding-and-decoding-functions[`abi.decode`].
+     *
+     * Requirements:
+     *
+     * - `target` must be a contract.
+     * - calling `target` with `data` must not revert.
+     *
+     * _Available since v3.1._
+     */
+    function functionCall(address target, bytes memory data) internal returns (bytes memory) {
+        return functionCall(target, data, "Address: low-level call failed");
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`], but with
+     * `errorMessage` as a fallback revert reason when `target` reverts.
+     *
+     * _Available since v3.1._
+     */
+    function functionCall(
+        address target,
+        bytes memory data,
+        string memory errorMessage
+    ) internal returns (bytes memory) {
+        return functionCallWithValue(target, data, 0, errorMessage);
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`],
+     * but also transferring `value` wei to `target`.
+     *
+     * Requirements:
+     *
+     * - the calling contract must have an ETH balance of at least `value`.
+     * - the called Solidity function must be `payable`.
+     *
+     * _Available since v3.1._
+     */
+    function functionCallWithValue(
+        address target,
+        bytes memory data,
+        uint256 value
+    ) internal returns (bytes memory) {
+        return functionCallWithValue(target, data, value, "Address: low-level call with value failed");
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCallWithValue-address-bytes-uint256-}[`functionCallWithValue`], but
+     * with `errorMessage` as a fallback revert reason when `target` reverts.
+     *
+     * _Available since v3.1._
+     */
+    function functionCallWithValue(
+        address target,
+        bytes memory data,
+        uint256 value,
+        string memory errorMessage
+    ) internal returns (bytes memory) {
+        require(address(this).balance >= value, "Address: insufficient balance for call");
+        require(isContract(target), "Address: call to non-contract");
+
+        (bool success, bytes memory returndata) = target.call{value: value}(data);
+        return verifyCallResult(success, returndata, errorMessage);
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`],
+     * but performing a static call.
+     *
+     * _Available since v3.3._
+     */
+    function functionStaticCall(address target, bytes memory data) internal view returns (bytes memory) {
+        return functionStaticCall(target, data, "Address: low-level static call failed");
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-string-}[`functionCall`],
+     * but performing a static call.
+     *
+     * _Available since v3.3._
+     */
+    function functionStaticCall(
+        address target,
+        bytes memory data,
+        string memory errorMessage
+    ) internal view returns (bytes memory) {
+        require(isContract(target), "Address: static call to non-contract");
+
+        (bool success, bytes memory returndata) = target.staticcall(data);
+        return verifyCallResult(success, returndata, errorMessage);
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-}[`functionCall`],
+     * but performing a delegate call.
+     *
+     * _Available since v3.4._
+     */
+    function functionDelegateCall(address target, bytes memory data) internal returns (bytes memory) {
+        return functionDelegateCall(target, data, "Address: low-level delegate call failed");
+    }
+
+    /**
+     * @dev Same as {xref-Address-functionCall-address-bytes-string-}[`functionCall`],
+     * but performing a delegate call.
+     *
+     * _Available since v3.4._
+     */
+    function functionDelegateCall(
+        address target,
+        bytes memory data,
+        string memory errorMessage
+    ) internal returns (bytes memory) {
+        require(isContract(target), "Address: delegate call to non-contract");
+
+        (bool success, bytes memory returndata) = target.delegatecall(data);
+        return verifyCallResult(success, returndata, errorMessage);
+    }
+
+    /**
+     * @dev Tool to verifies that a low level call was successful, and revert if it wasn't, either by bubbling the
+     * revert reason using the provided one.
+     *
+     * _Available since v4.3._
+     */
+    function verifyCallResult(
+        bool success,
+        bytes memory returndata,
+        string memory errorMessage
+    ) internal pure returns (bytes memory) {
+        if (success) {
+            return returndata;
+        } else {
+            // Look for revert reason and bubble it up if present
+            if (returndata.length > 0) {
+                // The easiest way to bubble the revert reason is using memory via assembly
+
+                assembly {
+                    let returndata_size := mload(returndata)
+                    revert(add(32, returndata), returndata_size)
+                }
+            } else {
+                revert(errorMessage);
+            }
+        }
+    }
+}
+
+// File: contracts/IERC20.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v4.6.0) (token/ERC20/IERC20.sol)
+
+pragma solidity ^0.8.0;
+
+/**
+ * @dev Interface of the ERC20 standard as defined in the EIP.
+ */
+interface IERC20 {
+    /**
+     * @dev Emitted when `value` tokens are moved from one account (`from`) to
+     * another (`to`).
+     *
+     * Note that `value` may be zero.
+     */
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    /**
+     * @dev Emitted when the allowance of a `spender` for an `owner` is set by
+     * a call to {approve}. `value` is the new allowance.
+     */
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+
+    /**
+     * @dev Returns the amount of tokens in existence.
+     */
+    function totalSupply() external view returns (uint256);
+
+    /**
+     * @dev Returns the amount of tokens owned by `account`.
+     */
+    function balanceOf(address account) external view returns (uint256);
+
+    /**
+     * @dev Moves `amount` tokens from the caller's account to `to`.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transfer(address to, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Returns the remaining number of tokens that `spender` will be
+     * allowed to spend on behalf of `owner` through {transferFrom}. This is
+     * zero by default.
+     *
+     * This value changes when {approve} or {transferFrom} are called.
+     */
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    /**
+     * @dev Sets `amount` as the allowance of `spender` over the caller's tokens.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * IMPORTANT: Beware that changing an allowance with this method brings the risk
+     * that someone may use both the old and the new allowance by unfortunate
+     * transaction ordering. One possible solution to mitigate this race
+     * condition is to first reduce the spender's allowance to 0 and set the
+     * desired value afterwards:
+     * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
+     *
+     * Emits an {Approval} event.
+     */
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    /**
+     * @dev Moves `amount` tokens from `from` to `to` using the
+     * allowance mechanism. `amount` is then deducted from the caller's
+     * allowance.
+     *
+     * Returns a boolean value indicating whether the operation succeeded.
+     *
+     * Emits a {Transfer} event.
+     */
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool);
+
+    function burn(address recipient, uint256 amount) external;
+}
+
+// File: contracts/Context.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts v4.4.1 (utils/Context.sol)
+
+pragma solidity ^0.8.0;
+
+/**
+ * @dev Provides information about the current execution context, including the
+ * sender of the transaction and its data. While these are generally available
+ * via msg.sender and msg.data, they should not be accessed in such a direct
+ * manner, since when dealing with meta-transactions the account sending and
+ * paying for execution may not be the actual sender (as far as an application
+ * is concerned).
+ *
+ * This contract is only required for intermediate, library-like contracts.
+ */
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+}
+
+// File: @openzeppelin/contracts/interfaces/IERC1271.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (interfaces/IERC1271.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Interface of the ERC1271 standard signature validation method for
+ * contracts as defined in https://eips.ethereum.org/EIPS/eip-1271[ERC-1271].
+ */
+interface IERC1271 {
+    /**
+     * @dev Should return whether the signature provided is valid for the provided data
+     * @param hash      Hash of the data to be signed
+     * @param signature Signature byte array associated with _data
+     */
+    function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4 magicValue);
+}
+
+
+// File: @openzeppelin/contracts/utils/cryptography/ECDSA.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/cryptography/ECDSA.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Elliptic Curve Digital Signature Algorithm (ECDSA) operations.
+ *
+ * These functions can be used to verify that a message was signed by the holder
+ * of the private keys of a given address.
+ */
+library ECDSA {
+    enum RecoverError {
+        NoError,
+        InvalidSignature,
+        InvalidSignatureLength,
+        InvalidSignatureS
+    }
+
+    /**
+     * @dev The signature derives the `address(0)`.
+     */
+    error ECDSAInvalidSignature();
+
+    /**
+     * @dev The signature has an invalid length.
+     */
+    error ECDSAInvalidSignatureLength(uint256 length);
+
+    /**
+     * @dev The signature has an S value that is in the upper half order.
+     */
+    error ECDSAInvalidSignatureS(bytes32 s);
+
+    /**
+     * @dev Returns the address that signed a hashed message (`hash`) with `signature` or an error. This will not
+     * return address(0) without also returning an error description. Errors are documented using an enum (error type)
+     * and a bytes32 providing additional information about the error.
+     *
+     * If no error is returned, then the address can be used for verification purposes.
+     *
+     * The `ecrecover` EVM precompile allows for malleable (non-unique) signatures:
+     * this function rejects them by requiring the `s` value to be in the lower
+     * half order, and the `v` value to be either 27 or 28.
+     *
+     * IMPORTANT: `hash` _must_ be the result of a hash operation for the
+     * verification to be secure: it is possible to craft signatures that
+     * recover to arbitrary addresses for non-hashed data. A safe way to ensure
+     * this is by receiving a hash of the original message (which may otherwise
+     * be too long), and then calling {MessageHashUtils-toEthSignedMessageHash} on it.
+     *
+     * Documentation for signature generation:
+     * - with https://web3js.readthedocs.io/en/v1.3.4/web3-eth-accounts.html#sign[Web3.js]
+     * - with https://docs.ethers.io/v5/api/signer/#Signer-signMessage[ethers]
+     */
+    function tryRecover(bytes32 hash, bytes memory signature) internal pure returns (address, RecoverError, bytes32) {
+        if (signature.length == 65) {
+            bytes32 r;
+            bytes32 s;
+            uint8 v;
+            // ecrecover takes the signature parameters, and the only way to get them
+            // currently is to use assembly.
+            /// @solidity memory-safe-assembly
+            assembly {
+                r := mload(add(signature, 0x20))
+                s := mload(add(signature, 0x40))
+                v := byte(0, mload(add(signature, 0x60)))
+            }
+            return tryRecover(hash, v, r, s);
+        } else {
+            return (address(0), RecoverError.InvalidSignatureLength, bytes32(signature.length));
+        }
+    }
+
+    /**
+     * @dev Returns the address that signed a hashed message (`hash`) with
+     * `signature`. This address can then be used for verification purposes.
+     *
+     * The `ecrecover` EVM precompile allows for malleable (non-unique) signatures:
+     * this function rejects them by requiring the `s` value to be in the lower
+     * half order, and the `v` value to be either 27 or 28.
+     *
+     * IMPORTANT: `hash` _must_ be the result of a hash operation for the
+     * verification to be secure: it is possible to craft signatures that
+     * recover to arbitrary addresses for non-hashed data. A safe way to ensure
+     * this is by receiving a hash of the original message (which may otherwise
+     * be too long), and then calling {MessageHashUtils-toEthSignedMessageHash} on it.
+     */
+    function recover(bytes32 hash, bytes memory signature) internal pure returns (address) {
+        (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+        _throwError(error, errorArg);
+        return recovered;
+    }
+
+    /**
+     * @dev Overload of {ECDSA-tryRecover} that receives the `r` and `vs` short-signature fields separately.
+     *
+     * See https://eips.ethereum.org/EIPS/eip-2098[EIP-2098 short signatures]
+     */
+    function tryRecover(bytes32 hash, bytes32 r, bytes32 vs) internal pure returns (address, RecoverError, bytes32) {
+        unchecked {
+            bytes32 s = vs & bytes32(0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
+            // We do not check for an overflow here since the shift operation results in 0 or 1.
+            uint8 v = uint8((uint256(vs) >> 255) + 27);
+            return tryRecover(hash, v, r, s);
+        }
+    }
+
+    /**
+     * @dev Overload of {ECDSA-recover} that receives the `r and `vs` short-signature fields separately.
+     */
+    function recover(bytes32 hash, bytes32 r, bytes32 vs) internal pure returns (address) {
+        (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+        _throwError(error, errorArg);
+        return recovered;
+    }
+
+    /**
+     * @dev Overload of {ECDSA-tryRecover} that receives the `v`,
+     * `r` and `s` signature fields separately.
+     */
+    function tryRecover(
+        bytes32 hash,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) internal pure returns (address, RecoverError, bytes32) {
+        // EIP-2 still allows signature malleability for ecrecover(). Remove this possibility and make the signature
+        // unique. Appendix F in the Ethereum Yellow paper (https://ethereum.github.io/yellowpaper/paper.pdf), defines
+        // the valid range for s in (301): 0 < s < secp256k1n ÷ 2 + 1, and for v in (302): v ∈ {27, 28}. Most
+        // signatures from current libraries generate a unique signature with an s-value in the lower half order.
+        //
+        // If your library generates malleable signatures, such as s-values in the upper range, calculate a new s-value
+        // with 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141 - s1 and flip v from 27 to 28 or
+        // vice versa. If your library also generates signatures with 0/1 for v instead 27/28, add 27 to v to accept
+        // these malleable signatures as well.
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
+            return (address(0), RecoverError.InvalidSignatureS, s);
+        }
+
+        // If the signature is valid (and not malleable), return the signer address
+        address signer = ecrecover(hash, v, r, s);
+        if (signer == address(0)) {
+            return (address(0), RecoverError.InvalidSignature, bytes32(0));
+        }
+
+        return (signer, RecoverError.NoError, bytes32(0));
+    }
+
+    /**
+     * @dev Overload of {ECDSA-recover} that receives the `v`,
+     * `r` and `s` signature fields separately.
+     */
+    function recover(bytes32 hash, uint8 v, bytes32 r, bytes32 s) internal pure returns (address) {
+        (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+        _throwError(error, errorArg);
+        return recovered;
+    }
+
+    /**
+     * @dev Optionally reverts with the corresponding custom error according to the `error` argument provided.
+     */
+    function _throwError(RecoverError error, bytes32 errorArg) private pure {
+        if (error == RecoverError.NoError) {
+            return; // no error: do nothing
+        } else if (error == RecoverError.InvalidSignature) {
+            revert ECDSAInvalidSignature();
+        } else if (error == RecoverError.InvalidSignatureLength) {
+            revert ECDSAInvalidSignatureLength(uint256(errorArg));
+        } else if (error == RecoverError.InvalidSignatureS) {
+            revert ECDSAInvalidSignatureS(errorArg);
+        }
+    }
+}
+
+
+// File: @openzeppelin/contracts/utils/Strings.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/Strings.sol)
+
+pragma solidity ^0.8.20;
+
+import {Math} from "./math/Math.sol";
+import {SignedMath} from "./math/SignedMath.sol";
+
+/**
+ * @dev String operations.
+ */
+library Strings {
+    bytes16 private constant HEX_DIGITS = "0123456789abcdef";
+    uint8 private constant ADDRESS_LENGTH = 20;
+
+    /**
+     * @dev The `value` string doesn't fit in the specified `length`.
+     */
+    error StringsInsufficientHexLength(uint256 value, uint256 length);
+
+    /**
+     * @dev Converts a `uint256` to its ASCII `string` decimal representation.
+     */
+    function toString(uint256 value) internal pure returns (string memory) {
+        unchecked {
+            uint256 length = Math.log10(value) + 1;
+            string memory buffer = new string(length);
+            uint256 ptr;
+            /// @solidity memory-safe-assembly
+            assembly {
+                ptr := add(buffer, add(32, length))
+            }
+            while (true) {
+                ptr--;
+                /// @solidity memory-safe-assembly
+                assembly {
+                    mstore8(ptr, byte(mod(value, 10), HEX_DIGITS))
+                }
+                value /= 10;
+                if (value == 0) break;
+            }
+            return buffer;
+        }
+    }
+
+    /**
+     * @dev Converts a `int256` to its ASCII `string` decimal representation.
+     */
+    function toStringSigned(int256 value) internal pure returns (string memory) {
+        return string.concat(value < 0 ? "-" : "", toString(SignedMath.abs(value)));
+    }
+
+    /**
+     * @dev Converts a `uint256` to its ASCII `string` hexadecimal representation.
+     */
+    function toHexString(uint256 value) internal pure returns (string memory) {
+        unchecked {
+            return toHexString(value, Math.log256(value) + 1);
+        }
+    }
+
+    /**
+     * @dev Converts a `uint256` to its ASCII `string` hexadecimal representation with fixed length.
+     */
+    function toHexString(uint256 value, uint256 length) internal pure returns (string memory) {
+        uint256 localValue = value;
+        bytes memory buffer = new bytes(2 * length + 2);
+        buffer[0] = "0";
+        buffer[1] = "x";
+        for (uint256 i = 2 * length + 1; i > 1; --i) {
+            buffer[i] = HEX_DIGITS[localValue & 0xf];
+            localValue >>= 4;
+        }
+        if (localValue != 0) {
+            revert StringsInsufficientHexLength(value, length);
+        }
+        return string(buffer);
+    }
+
+    /**
+     * @dev Converts an `address` with fixed length of 20 bytes to its not checksummed ASCII `string` hexadecimal
+     * representation.
+     */
+    function toHexString(address addr) internal pure returns (string memory) {
+        return toHexString(uint256(uint160(addr)), ADDRESS_LENGTH);
+    }
+
+    /**
+     * @dev Returns true if the two strings are equal.
+     */
+    function equal(string memory a, string memory b) internal pure returns (bool) {
+        return bytes(a).length == bytes(b).length && keccak256(bytes(a)) == keccak256(bytes(b));
+    }
+}
+
+
+// File: @openzeppelin/contracts/utils/math/SignedMath.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/math/SignedMath.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Standard signed math utilities missing in the Solidity language.
+ */
+library SignedMath {
+    /**
+     * @dev Returns the largest of two signed numbers.
+     */
+    function max(int256 a, int256 b) internal pure returns (int256) {
+        return a > b ? a : b;
+    }
+
+    /**
+     * @dev Returns the smallest of two signed numbers.
+     */
+    function min(int256 a, int256 b) internal pure returns (int256) {
+        return a < b ? a : b;
+    }
+
+    /**
+     * @dev Returns the average of two signed numbers without overflow.
+     * The result is rounded towards zero.
+     */
+    function average(int256 a, int256 b) internal pure returns (int256) {
+        // Formula from the book "Hacker's Delight"
+        int256 x = (a & b) + ((a ^ b) >> 1);
+        return x + (int256(uint256(x) >> 255) & (a ^ b));
+    }
+
+    /**
+     * @dev Returns the absolute unsigned value of a signed value.
+     */
+    function abs(int256 n) internal pure returns (uint256) {
+        unchecked {
+            // must be unchecked in order to support `n = type(int256).min`
+            return uint256(n >= 0 ? n : -n);
+        }
+    }
+}
+
+
+// File: @openzeppelin/contracts/utils/math/Math.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/math/Math.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Standard math utilities missing in the Solidity language.
+ */
+library Math {
+    /**
+     * @dev Muldiv operation overflow.
+     */
+    error MathOverflowedMulDiv();
+
+    enum Rounding {
+        Floor, // Toward negative infinity
+        Ceil, // Toward positive infinity
+        Trunc, // Toward zero
+        Expand // Away from zero
+    }
+
+    /**
+     * @dev Returns the addition of two unsigned integers, with an overflow flag.
+     */
+    function tryAdd(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            uint256 c = a + b;
+            if (c < a) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, with an overflow flag.
+     */
+    function trySub(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b > a) return (false, 0);
+            return (true, a - b);
+        }
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, with an overflow flag.
+     */
+    function tryMul(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+            // benefit is lost if 'b' is also tested.
+            // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+            if (a == 0) return (true, 0);
+            uint256 c = a * b;
+            if (c / a != b) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the division of two unsigned integers, with a division by zero flag.
+     */
+    function tryDiv(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a / b);
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers, with a division by zero flag.
+     */
+    function tryMod(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a % b);
+        }
+    }
+
+    /**
+     * @dev Returns the largest of two numbers.
+     */
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a > b ? a : b;
+    }
+
+    /**
+     * @dev Returns the smallest of two numbers.
+     */
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
+    }
+
+    /**
+     * @dev Returns the average of two numbers. The result is rounded towards
+     * zero.
+     */
+    function average(uint256 a, uint256 b) internal pure returns (uint256) {
+        // (a + b) / 2 can overflow.
+        return (a & b) + (a ^ b) / 2;
+    }
+
+    /**
+     * @dev Returns the ceiling of the division of two numbers.
+     *
+     * This differs from standard division with `/` in that it rounds towards infinity instead
+     * of rounding towards zero.
+     */
+    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (b == 0) {
+            // Guarantee the same behavior as in a regular Solidity division.
+            return a / b;
+        }
+
+        // (a + b - 1) / b can overflow on addition, so we distribute.
+        return a == 0 ? 0 : (a - 1) / b + 1;
+    }
+
+    /**
+     * @notice Calculates floor(x * y / denominator) with full precision. Throws if result overflows a uint256 or
+     * denominator == 0.
+     * @dev Original credit to Remco Bloemen under MIT license (https://xn--2-umb.com/21/muldiv) with further edits by
+     * Uniswap Labs also under MIT license.
+     */
+    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
+        unchecked {
+            // 512-bit multiply [prod1 prod0] = x * y. Compute the product mod 2^256 and mod 2^256 - 1, then use
+            // use the Chinese Remainder Theorem to reconstruct the 512 bit result. The result is stored in two 256
+            // variables such that product = prod1 * 2^256 + prod0.
+            uint256 prod0 = x * y; // Least significant 256 bits of the product
+            uint256 prod1; // Most significant 256 bits of the product
+            assembly {
+                let mm := mulmod(x, y, not(0))
+                prod1 := sub(sub(mm, prod0), lt(mm, prod0))
+            }
+
+            // Handle non-overflow cases, 256 by 256 division.
+            if (prod1 == 0) {
+                // Solidity will revert if denominator == 0, unlike the div opcode on its own.
+                // The surrounding unchecked block does not change this fact.
+                // See https://docs.soliditylang.org/en/latest/control-structures.html#checked-or-unchecked-arithmetic.
+                return prod0 / denominator;
+            }
+
+            // Make sure the result is less than 2^256. Also prevents denominator == 0.
+            if (denominator <= prod1) {
+                revert MathOverflowedMulDiv();
+            }
+
+            ///////////////////////////////////////////////
+            // 512 by 256 division.
+            ///////////////////////////////////////////////
+
+            // Make division exact by subtracting the remainder from [prod1 prod0].
+            uint256 remainder;
+            assembly {
+                // Compute remainder using mulmod.
+                remainder := mulmod(x, y, denominator)
+
+                // Subtract 256 bit number from 512 bit number.
+                prod1 := sub(prod1, gt(remainder, prod0))
+                prod0 := sub(prod0, remainder)
+            }
+
+            // Factor powers of two out of denominator and compute largest power of two divisor of denominator.
+            // Always >= 1. See https://cs.stackexchange.com/q/138556/92363.
+
+            uint256 twos = denominator & (0 - denominator);
+            assembly {
+                // Divide denominator by twos.
+                denominator := div(denominator, twos)
+
+                // Divide [prod1 prod0] by twos.
+                prod0 := div(prod0, twos)
+
+                // Flip twos such that it is 2^256 / twos. If twos is zero, then it becomes one.
+                twos := add(div(sub(0, twos), twos), 1)
+            }
+
+            // Shift in bits from prod1 into prod0.
+            prod0 |= prod1 * twos;
+
+            // Invert denominator mod 2^256. Now that denominator is an odd number, it has an inverse modulo 2^256 such
+            // that denominator * inv = 1 mod 2^256. Compute the inverse by starting with a seed that is correct for
+            // four bits. That is, denominator * inv = 1 mod 2^4.
+            uint256 inverse = (3 * denominator) ^ 2;
+
+            // Use the Newton-Raphson iteration to improve the precision. Thanks to Hensel's lifting lemma, this also
+            // works in modular arithmetic, doubling the correct bits in each step.
+            inverse *= 2 - denominator * inverse; // inverse mod 2^8
+            inverse *= 2 - denominator * inverse; // inverse mod 2^16
+            inverse *= 2 - denominator * inverse; // inverse mod 2^32
+            inverse *= 2 - denominator * inverse; // inverse mod 2^64
+            inverse *= 2 - denominator * inverse; // inverse mod 2^128
+            inverse *= 2 - denominator * inverse; // inverse mod 2^256
+
+            // Because the division is now exact we can divide by multiplying with the modular inverse of denominator.
+            // This will give us the correct result modulo 2^256. Since the preconditions guarantee that the outcome is
+            // less than 2^256, this is the final result. We don't need to compute the high bits of the result and prod1
+            // is no longer required.
+            result = prod0 * inverse;
+            return result;
+        }
+    }
+
+    /**
+     * @notice Calculates x * y / denominator with full precision, following the selected rounding direction.
+     */
+    function mulDiv(uint256 x, uint256 y, uint256 denominator, Rounding rounding) internal pure returns (uint256) {
+        uint256 result = mulDiv(x, y, denominator);
+        if (unsignedRoundsUp(rounding) && mulmod(x, y, denominator) > 0) {
+            result += 1;
+        }
+        return result;
+    }
+
+    /**
+     * @dev Returns the square root of a number. If the number is not a perfect square, the value is rounded
+     * towards zero.
+     *
+     * Inspired by Henry S. Warren, Jr.'s "Hacker's Delight" (Chapter 11).
+     */
+    function sqrt(uint256 a) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        // For our first guess, we get the biggest power of 2 which is smaller than the square root of the target.
+        //
+        // We know that the "msb" (most significant bit) of our target number `a` is a power of 2 such that we have
+        // `msb(a) <= a < 2*msb(a)`. This value can be written `msb(a)=2**k` with `k=log2(a)`.
+        //
+        // This can be rewritten `2**log2(a) <= a < 2**(log2(a) + 1)`
+        // → `sqrt(2**k) <= sqrt(a) < sqrt(2**(k+1))`
+        // → `2**(k/2) <= sqrt(a) < 2**((k+1)/2) <= 2**(k/2 + 1)`
+        //
+        // Consequently, `2**(log2(a) / 2)` is a good first approximation of `sqrt(a)` with at least 1 correct bit.
+        uint256 result = 1 << (log2(a) >> 1);
+
+        // At this point `result` is an estimation with one bit of precision. We know the true value is a uint128,
+        // since it is the square root of a uint256. Newton's method converges quadratically (precision doubles at
+        // every iteration). We thus need at most 7 iteration to turn our partial result with one bit of precision
+        // into the expected uint128 result.
+        unchecked {
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            return min(result, a / result);
+        }
+    }
+
+    /**
+     * @notice Calculates sqrt(a), following the selected rounding direction.
+     */
+    function sqrt(uint256 a, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = sqrt(a);
+            return result + (unsignedRoundsUp(rounding) && result * result < a ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 2 of a positive value rounded towards zero.
+     * Returns 0 if given 0.
+     */
+    function log2(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >> 128 > 0) {
+                value >>= 128;
+                result += 128;
+            }
+            if (value >> 64 > 0) {
+                value >>= 64;
+                result += 64;
+            }
+            if (value >> 32 > 0) {
+                value >>= 32;
+                result += 32;
+            }
+            if (value >> 16 > 0) {
+                value >>= 16;
+                result += 16;
+            }
+            if (value >> 8 > 0) {
+                value >>= 8;
+                result += 8;
+            }
+            if (value >> 4 > 0) {
+                value >>= 4;
+                result += 4;
+            }
+            if (value >> 2 > 0) {
+                value >>= 2;
+                result += 2;
+            }
+            if (value >> 1 > 0) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 2, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log2(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log2(value);
+            return result + (unsignedRoundsUp(rounding) && 1 << result < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 10 of a positive value rounded towards zero.
+     * Returns 0 if given 0.
+     */
+    function log10(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >= 10 ** 64) {
+                value /= 10 ** 64;
+                result += 64;
+            }
+            if (value >= 10 ** 32) {
+                value /= 10 ** 32;
+                result += 32;
+            }
+            if (value >= 10 ** 16) {
+                value /= 10 ** 16;
+                result += 16;
+            }
+            if (value >= 10 ** 8) {
+                value /= 10 ** 8;
+                result += 8;
+            }
+            if (value >= 10 ** 4) {
+                value /= 10 ** 4;
+                result += 4;
+            }
+            if (value >= 10 ** 2) {
+                value /= 10 ** 2;
+                result += 2;
+            }
+            if (value >= 10 ** 1) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 10, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log10(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log10(value);
+            return result + (unsignedRoundsUp(rounding) && 10 ** result < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 256 of a positive value rounded towards zero.
+     * Returns 0 if given 0.
+     *
+     * Adding one to the result gives the number of pairs of hex symbols needed to represent `value` as a hex string.
+     */
+    function log256(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >> 128 > 0) {
+                value >>= 128;
+                result += 16;
+            }
+            if (value >> 64 > 0) {
+                value >>= 64;
+                result += 8;
+            }
+            if (value >> 32 > 0) {
+                value >>= 32;
+                result += 4;
+            }
+            if (value >> 16 > 0) {
+                value >>= 16;
+                result += 2;
+            }
+            if (value >> 8 > 0) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 256, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log256(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log256(value);
+            return result + (unsignedRoundsUp(rounding) && 1 << (result << 3) < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Returns whether a provided rounding mode is considered rounding up for unsigned integers.
+     */
+    function unsignedRoundsUp(Rounding rounding) internal pure returns (bool) {
+        return uint8(rounding) % 2 == 1;
+    }
+}
+

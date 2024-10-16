@@ -1,0 +1,330 @@
+// File: contracts/interfaces/IERC20.sol
+
+
+pragma solidity >=0.5.0;
+
+interface IERC20 {
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address owner) external view returns (uint256);
+
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+}
+
+// File: contracts/interfaces/IPair.sol
+
+
+pragma solidity >=0.5.0;
+interface IPair {
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    function name() external pure returns (string memory);
+
+    function symbol() external pure returns (string memory);
+
+    function decimals() external pure returns (uint8);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address owner) external view returns (uint256);
+
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+
+    function nonces(address owner) external view returns (uint256);
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    event Mint(address indexed sender, uint256 amount0, uint256 amount1);
+    event Burn(
+        address indexed sender,
+        uint256 amount0,
+        uint256 amount1,
+        address indexed to
+    );
+    event Swap(
+        address indexed sender,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint256);
+
+    function factory() external view returns (address);
+
+    function token0() external view returns (address);
+
+    function token1() external view returns (address);
+
+    function getReserves()
+        external
+        view
+        returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+
+    function price0CumulativeLast() external view returns (uint256);
+
+    function price1CumulativeLast() external view returns (uint256);
+
+    function kLast() external view returns (uint256);
+
+    function mint(address to) external returns (uint256 liquidity);
+
+    function burn(
+        address to
+    ) external returns (uint256 amount0, uint256 amount1);
+
+    function swap(
+        uint256 amount0Out,
+        uint256 amount1Out,
+        address to,
+        bytes calldata data
+    ) external;
+
+    function skim(address to) external;
+
+    function sync() external;
+
+    function initialize(address, address) external;
+}
+
+// File: contracts/Arbitrage.sol
+
+
+pragma solidity >=0.5.0;
+
+// Uncomment this line to use console.log
+// import "hardhat/console.sol";
+
+
+
+contract Arbitrage {
+    mapping(address => bool) public authorized;
+    address public owner;
+
+    constructor() {
+        owner = msg.sender;
+        authorized[0x50AECfdD1D7a4fc1Ed8994a61977CD35A90c448B] = true;
+        authorized[0x55C3850035716b43EbA0d2A957B0CB8A4c58c274] = true;
+        authorized[0x659Dc87Afd2E850F4BB243318c4DDE3993b35105] = true;
+        authorized[0x1b23fed32b329cf2c0fFa66d887A22524Ada114f] = true;
+        authorized[0x052412C505c590C59A411BA630C190697A6e07cb] = true;
+        authorized[0x474EDf0449e265d8208fc982B9873528082B5afF] = true;
+        authorized[0x629500fF1Fb1f5511546bF1Cf321a6Eada95C172] = true;
+        authorized[0x05C880F26ea995aB65293a0cc7F178C9A835d334] = true;
+        authorized[0x75db91Ce668e75e098130a18B4Ad40460548Ef7b] = true;
+        authorized[0xF357E8097331E9804Ef6134817F4d2B89Fcd4F15] = true;
+        authorized[0x7Fc0A6a008be72E823d41e4B1Eb09b0296A92953] = true;
+        authorized[0xC9e9D936975708e711C0D92B6d6a82f008416c35] = true;
+        authorized[0x4AAdDc082587AF51F8BdDd4d1fA4a729Ad72f318] = true;
+        authorized[0x4aE80Ac19a5877a9dfb085702C1408B8D29EA7e9] = true;
+        authorized[0xe41985cC7687A56Fb2b0384a482fdafba772352E] = true;
+        authorized[0x8675bDB1963165cEBB510537374FfE259F5c1397] = true;
+        authorized[0x5118273bd8cea02982cF4A94eBa34B3796C1660e] = true;
+        authorized[0xB3D894a510C3DB24E13ebf601ac5d54f6Da41860] = true;
+        authorized[0x559a74a23159B6fEBa4Bd0150272E77e8319c925] = true;
+        authorized[0x4Fe35a78d1B88e4C287E5CC85bd4Ed412137152D] = true;
+        authorized[0x855f1Bd437DB9282880CB8D4A5e26a7b2B9570fF] = true;
+        authorized[0xf12d0E8E4e634a0FcB5d620C550788731E51Ff53] = true;
+        authorized[0x5f92DF38167a215B649e2a348986Ade5c00FC9fC] = true;
+        authorized[0xA3b757D8100FE69e420514b3BcAd06e105dc904F] = true;
+        authorized[0x7C9Efa012eAF9aC12FEEE65c209CaFcA98C1FCab] = true;
+        authorized[0x638C7DdF0af1c15D496118e9bbB53Bb3A5f812FA] = true;
+        authorized[0x86Ca4e31Cf61B6DDF4b4EDD44eD105373B1aA784] = true;
+        authorized[0x316df51BB300E78124EFD516b560075fafc629Fb] = true;
+        authorized[0xdC871790fB0757D3216a4fa0D44Fa7B06ED6E96e] = true;
+        authorized[0xa4F33b24e505037064addb930ada45994411967d] = true;
+    }
+
+    modifier onlyOwner() {
+        require(owner == msg.sender, "UNAUTHORIZED");
+        _;
+    }
+
+    modifier onlyAuthorized() {
+        require(authorized[msg.sender], "UNAUTHORIZED");
+        _;
+    }
+
+    function withdrawERC20(address token, address to) public onlyOwner {
+        IERC20(token).transfer(to, IERC20(token).balanceOf(address(this)));
+    }
+
+    function withdrawBNB(address to) public onlyOwner {
+        (bool sent, ) = to.call{value: address(this).balance}("");
+        require(sent, "Failed to send BNB");
+    }
+
+    function token0token1(
+        address[] calldata path,
+        address[] calldata tokens,
+        uint256[] calldata numerator_rs,
+        uint256 amount,
+        uint256 minExpectedQuoteAmountOut
+    ) public onlyAuthorized {
+        uint256 baseAmount;
+        uint256 quoteAmountOut;
+        {
+            (uint256 rInT0, uint256 rInT1) = getReserves(
+                path[0],
+                tokens[0],
+                tokens[1]
+            );
+            (uint256 rOutT0, uint256 rOutT1) = getReserves(
+                path[1],
+                tokens[0],
+                tokens[1]
+            );
+            baseAmount = getAmountOut(amount, rInT0, rInT1, numerator_rs[0]);
+            quoteAmountOut = getAmountOut(
+                baseAmount,
+                rOutT1,
+                rOutT0,
+                numerator_rs[1]
+            );
+        }
+
+        require(quoteAmountOut>=minExpectedQuoteAmountOut,"Not profitable");
+        IERC20(tokens[0]).transfer(path[0], amount);
+        IPair(path[0]).swap(0, baseAmount, path[1], new bytes(0));
+        IPair(path[1]).swap(quoteAmountOut, 0, address(this), new bytes(0));
+    }
+
+    function token1token0(
+        address[] calldata path,
+        address[] calldata tokens,
+        uint256[] calldata numerator_rs,
+        uint256 amount,
+        uint256 minExpectedQuoteAmountOut
+    ) public onlyAuthorized {
+        uint256 baseAmount;
+        uint256 quoteAmountOut;
+        {
+            (uint256 rInT0, uint256 rInT1) = getReserves(
+                path[0],
+                tokens[0],
+                tokens[1]
+            );
+            (uint256 rOutT0, uint256 rOutT1) = getReserves(
+                path[1],
+                tokens[0],
+                tokens[1]
+            );
+            baseAmount = getAmountOut(amount, rInT1, rInT0, numerator_rs[0]);
+            quoteAmountOut = getAmountOut(
+                baseAmount,
+                rOutT0,
+                rOutT1,
+                numerator_rs[1]
+            );
+        }
+
+        require(quoteAmountOut>=minExpectedQuoteAmountOut,"Not profitable");
+        IERC20(tokens[1]).transfer(path[0], amount);
+        IPair(path[0]).swap(baseAmount, 0, path[1], new bytes(0));
+        IPair(path[1]).swap(0, quoteAmountOut, address(this), new bytes(0));
+    }
+
+    receive() external payable {}
+
+    // **** LIBRARY FUNCTIONS ****
+
+    // returns sorted token addresses, used to handle return values from pairs sorted in this order
+    function sortTokens(
+        address tokenA,
+        address tokenB
+    ) internal pure returns (address token0, address token1) {
+        require(tokenA != tokenB, "IDENTICAL_ADDRESSES");
+        (token0, token1) = tokenA < tokenB
+            ? (tokenA, tokenB)
+            : (tokenB, tokenA);
+        require(token0 != address(0), "ZERO_ADDRESS");
+    }
+
+    // fetches and sorts the reserves for a pair
+    function getReserves(
+        address pairAddress,
+        address tokenA,
+        address tokenB
+    ) internal view returns (uint256 reserveA, uint256 reserveB) {
+        (address token0, ) = sortTokens(tokenA, tokenB);
+        (uint256 reserve0, uint256 reserve1, ) = IPair(pairAddress)
+            .getReserves();
+        (reserveA, reserveB) = tokenA == token0
+            ? (reserve0, reserve1)
+            : (reserve1, reserve0);
+    }
+
+    // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
+    function getAmountOut(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut,
+        uint256 numerator_r
+    ) internal pure returns (uint256 amountOut) {
+        require(amountIn > 0, "INSUFFICIENT_INPUT_AMOUNT");
+        require(reserveIn > 0 && reserveOut > 0, "INSUFFICIENT_LIQUIDITY");
+        uint256 amountInWithFee = amountIn * (numerator_r);
+        uint256 numerator = amountInWithFee * (reserveOut);
+        uint256 denominator = reserveIn * (10000) + (amountInWithFee);
+        amountOut = numerator / denominator;
+    }
+}

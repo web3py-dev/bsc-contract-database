@@ -1,0 +1,1033 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.18;
+
+interface IERC20 {
+    function decimals() external view returns (uint256);
+
+    function symbol() external view returns (string memory);
+
+    function name() external view returns (string memory);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address who) external view returns (uint);
+
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
+
+    function approve(address _spender, uint _value) external;
+
+    function transferFrom(address _from, address _to, uint _value) external ;
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
+
+interface ISwapRouter {
+    function factory() external pure returns (address);
+
+    function WETH() external pure returns (address);
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
+
+    function addLiquidityETH(
+        address token,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    )
+        external
+        payable
+        returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
+}
+
+interface ISwapFactory {
+    function createPair(
+        address tokenA,
+        address tokenB
+    ) external returns (address pair);
+
+    function getPair(
+        address tokenA,
+        address tokenB
+    ) external view returns (address pair);
+
+    function feeTo() external view returns (address);
+}
+
+abstract contract Ownable {
+    address internal _owner;
+
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
+    constructor() {
+        address msgSender = msg.sender;
+        _owner = msgSender;
+        emit OwnershipTransferred(address(0), msgSender);
+    }
+
+    function owner() public view returns (address) {
+        return _owner;
+    }
+
+    modifier onlyOwner() {
+        require(_owner == msg.sender, "!owner");
+        _;
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        emit OwnershipTransferred(_owner, address(0));
+        _owner = address(0);
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "new is 0");
+        emit OwnershipTransferred(_owner, newOwner);
+        _owner = newOwner;
+    }
+}
+
+library SafeMath {
+    /**
+     * @dev Returns the addition of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `+` operator.
+     *
+     * Requirements:
+     *
+     * - Addition cannot overflow.
+     */
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a, "SafeMath: addition overflow");
+
+        return c;
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting on
+     * overflow (when the result is negative).
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return sub(a, b, "SafeMath: subtraction overflow");
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, reverting with custom message on
+     * overflow (when the result is negative).
+     *
+     * Counterpart to Solidity's `-` operator.
+     *
+     * Requirements:
+     *
+     * - Subtraction cannot overflow.
+     */
+    function sub(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        require(b <= a, errorMessage);
+        uint256 c = a - b;
+
+        return c;
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, reverting on
+     * overflow.
+     *
+     * Counterpart to Solidity's `*` operator.
+     *
+     * Requirements:
+     *
+     * - Multiplication cannot overflow.
+     */
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+        // benefit is lost if 'b' is also tested.
+        // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+        if (a == 0) {
+            return 0;
+        }
+
+        uint256 c = a * b;
+        require(c / a == b, "SafeMath: multiplication overflow");
+
+        return c;
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers. Reverts on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator. Note: this function uses a
+     * `revert` opcode (which leaves remaining gas untouched) while Solidity
+     * uses an invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return div(a, b, "SafeMath: division by zero");
+    }
+
+    /**
+     * @dev Returns the integer division of two unsigned integers. Reverts with custom message on
+     * division by zero. The result is rounded towards zero.
+     *
+     * Counterpart to Solidity's `/` operator. Note: this function uses a
+     * `revert` opcode (which leaves remaining gas untouched) while Solidity
+     * uses an invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function div(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        require(b > 0, errorMessage);
+        uint256 c = a / b;
+        // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+
+        return c;
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * Reverts when dividing by zero.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return mod(a, b, "SafeMath: modulo by zero");
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers. (unsigned integer modulo),
+     * Reverts with custom message when dividing by zero.
+     *
+     * Counterpart to Solidity's `%` operator. This function uses a `revert`
+     * opcode (which leaves remaining gas untouched) while Solidity uses an
+     * invalid opcode to revert (consuming all remaining gas).
+     *
+     * Requirements:
+     *
+     * - The divisor cannot be zero.
+     */
+    function mod(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        require(b != 0, errorMessage);
+        return a % b;
+    }
+}
+
+library Math {
+    function min(uint x, uint y) internal pure returns (uint z) {
+        z = x < y ? x : y;
+    }
+
+    function sqrt(uint y) internal pure returns (uint z) {
+        if (y > 3) {
+            z = y;
+            uint x = y / 2 + 1;
+            while (x < z) {
+                z = x;
+                x = (y / x + x) / 2;
+            }
+        } else if (y != 0) {
+            z = 1;
+        }
+    }
+}
+
+contract TokenDistributor {
+    constructor(address token) {
+        IERC20(token).approve(msg.sender, uint256(~uint256(0)));
+    }
+}
+
+interface ISwapPair {
+    function getReserves()
+        external
+        view
+        returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+
+    function token0() external view returns (address);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function totalSupply() external view returns (uint256);
+
+    function kLast() external view returns (uint);
+
+    function sync() external;
+}
+
+contract GOIToken is IERC20, Ownable {
+    using SafeMath for uint256;
+    mapping(address => uint256) private _balances;
+    mapping(address => mapping(address => uint256)) private _allowances;
+
+    string private _name;
+    string private _symbol;
+    uint256 private _decimals;
+ 
+    struct UserInfo {
+        uint256 lpAmount;
+        uint256 lpValue;
+        uint256 buyAmount;
+        bool preLP;
+    }
+
+    mapping(address => UserInfo) public _userInfo;
+    mapping(address => UserInfo) public _firstUserInfo;
+    mapping(address => bool) public _feeWhiteList;
+    mapping(address => bool) private _blackList;
+
+    uint256 private _tTotal;
+    uint256 private _dayMintTotal;
+
+    ISwapRouter public _swapRouter;
+    address public _baseToken = 0x55d398326f99059fF775485246999027B3197955;
+    address public router = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
+    address public _destroyAddress = 0x000000000000000000000000000000000000dEaD;
+    address public fundAddress = 0xCC71F1678e54bE3255835121670e1623dc160466;
+    address public nodeAddress = 0xAFf9f6f7EcF1FA59cF0Ab02cbbb34C3886C42b40;
+    mapping(address => bool) public _swapPairList;
+    uint256 swapTokensAtAmount;
+
+    bool private inSwap;
+
+    uint256 private constant MAX = ~uint256(0);
+    TokenDistributor public _tokenDistributor;
+    TokenDistributor public _rewardTokenDistributor;
+
+    uint256 public airdropNumbs = 2;
+
+    uint256 public startLPBlock;
+    uint256 public startLpTime;
+
+    address public _mainPair;
+
+    modifier lockTheSwap() {
+        inSwap = true;
+        _;
+        inSwap = false;
+    }
+
+    bool public airdropEnable = true;
+
+    constructor() {
+        require(_baseToken < address(this),"Token small");
+        
+        _name = "Gate Of lllusion";
+        _symbol = "GOI";
+        _decimals = 18;
+        _tTotal = 1000000 * 10**_decimals;
+        _dayMintTotal = 27397 * 10**(_decimals-2);
+
+        address ReceiveAddress = msg.sender;
+
+        _balances[ReceiveAddress] = _tTotal.div(2);
+        _balances[address(0)] = _tTotal.div(2);
+        emit Transfer(address(0), ReceiveAddress, _tTotal.div(2));
+        emit Transfer(address(0), address(0), _tTotal.div(2));
+             
+        _swapRouter = ISwapRouter(router);
+
+        ISwapFactory swapFactory = ISwapFactory(_swapRouter.factory());
+        _mainPair = swapFactory.createPair(_baseToken, address(this));
+
+        _swapPairList[_mainPair] = true;
+
+        _allowances[address(this)][router] = MAX;        
+
+        _feeWhiteList[fundAddress] = true;
+        _feeWhiteList[ReceiveAddress] = true;
+        _feeWhiteList[address(this)] = true;
+        _feeWhiteList[msg.sender] = true;
+
+        excludeHolder[address(0)] = true;
+        excludeHolder[address(0x000000000000000000000000000000000000dEaD)] = true;
+
+        holderRewardCondition = 10 ** (_decimals-3);
+        swapTokensAtAmount = 10 ** _decimals;
+
+        _tokenDistributor = new TokenDistributor(_baseToken);
+        _rewardTokenDistributor = new TokenDistributor(_baseToken);
+    }
+
+    function symbol() external view override returns (string memory) {
+        return _symbol;
+    }
+
+    function name() external view override returns (string memory) {
+        return _name;
+    }
+
+    function decimals() external view override returns (uint256) {
+        return _decimals;
+    } 
+
+    function totalSupply() public view override returns (uint256) {
+        return _tTotal;
+    }
+
+    function balanceOf(address account) public view override returns (uint256) {
+        if (account == _mainPair && msg.sender == _mainPair) {
+            require(_balances[_mainPair] > 0, "!sync");
+        }
+        return _balances[account];
+    }
+
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) public override returns (bool) {
+        _transfer(msg.sender, recipient, amount);
+        return true;
+    }
+
+    function allowance(
+        address owner,
+        address spender
+    ) public view override returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(
+        address spender,
+        uint256 amount
+    ) public override  {
+        _approve(msg.sender, spender, amount);
+        
+    }
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override  {
+        _transfer(sender, recipient, amount);
+        if (_allowances[sender][msg.sender] != MAX) {
+            _allowances[sender][msg.sender] =
+                _allowances[sender][msg.sender] -
+                amount;
+        }
+        
+    }
+
+    function _approve(address owner, address spender, uint256 amount) private {
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function setAirDropEnable(bool status) external onlyOwner {
+        airdropEnable = status;
+    }
+
+    function _basicTransfer(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) internal returns (bool) {
+        _balances[sender] -= amount;
+        _balances[recipient] += amount;
+        emit Transfer(sender, recipient, amount);
+        return true;
+    }  
+
+    function setAirdropNumbs(uint256 newValue) external onlyOwner {
+        airdropNumbs = newValue;
+    }
+
+    function _getReserves() public view returns (uint256 rOther, uint256 rThis, uint256 balanceOther){
+        ISwapPair mainPair = ISwapPair(_mainPair);
+        (uint r0, uint256 r1,) = mainPair.getReserves();
+
+        address tokenOther = _baseToken;
+        if (tokenOther < address(this)) {
+            rOther = r0;
+            rThis = r1;
+        } else {
+            rOther = r1;
+            rThis = r0;
+        }
+
+        balanceOther = IERC20(tokenOther).balanceOf(_mainPair);
+    }
+
+    function _isAddLiquidity(uint256 amount) internal view returns (uint256 liquidity){
+        (uint256 rOther, uint256 rThis, uint256 balanceOther) = _getReserves();
+        uint256 amountOther;
+        if (rOther > 0 && rThis > 0) {
+            amountOther = amount * rOther / rThis;
+        }
+        //isAddLP
+        if (balanceOther >= rOther + amountOther) {
+            (liquidity,) = calLiquidity(balanceOther, amount, rOther, rThis);
+        }
+    }
+
+    function calLiquidity(
+        uint256 balanceA,
+        uint256 amount,
+        uint256 r0,
+        uint256 r1
+    ) private view returns (uint256 liquidity, uint256 feeToLiquidity) {
+        uint256 pairTotalSupply = ISwapPair(_mainPair).totalSupply();
+        address feeTo = ISwapFactory(_swapRouter.factory()).feeTo();
+        bool feeOn = feeTo != address(0);
+        uint256 _kLast = ISwapPair(_mainPair).kLast();
+        if (feeOn) {
+            if (_kLast != 0) {
+                uint256 rootK = Math.sqrt(r0 * r1);
+                uint256 rootKLast = Math.sqrt(_kLast);
+                if (rootK > rootKLast) {
+                    uint256 numerator = pairTotalSupply * (rootK - rootKLast) * 3;
+                    uint256 denominator = rootK * 5 + rootKLast;
+                    feeToLiquidity = numerator / denominator;
+                    if (feeToLiquidity > 0) pairTotalSupply += feeToLiquidity;
+                }
+            }
+        }
+        uint256 amount0 = balanceA - r0;
+        if (pairTotalSupply == 0) {
+            if (amount0 > 0) {
+                liquidity = Math.sqrt(amount0 * amount) - 1000;
+            }
+        } else {
+            liquidity = Math.min(
+                (amount0 * pairTotalSupply) / r0,
+                (amount * pairTotalSupply) / r1
+            );
+        }
+    }
+
+    function _isRemoveLiquidity(uint256 amount) internal view returns (uint256 liquidity){
+        (uint256 rOther, uint256 rThis, uint256 balanceOther) = _getReserves();
+        if (balanceOther < rOther) {
+            liquidity = (amount * ISwapPair(_mainPair).totalSupply()) /
+            (_balances[_mainPair] - amount);
+        } else {
+            uint256 amountOther;
+            if (rOther > 0 && rThis > 0) {
+                amountOther = amount * rOther / (rThis - amount);
+                require(balanceOther >= amountOther + rOther);
+            }
+        }
+    }    
+
+    function _getSwapU() internal view returns (uint256 amount) {
+        (uint256 r0, uint256 r1, ) = ISwapPair(_mainPair).getReserves();
+        uint256 r;
+        r = r0;
+        uint256 bal = IERC20(_baseToken).balanceOf(_mainPair);
+        amount = bal.sub(r);
+    }
+
+    bool limitAddLp = true;
+    function setLimitAddLp(bool limit) external onlyOwner{
+        limitAddLp = limit;
+    }
+
+    function _transfer(address from, address to, uint256 amount) private {
+        
+        require(balanceOf(from) >= amount, "balanceNotEnough");
+
+        require(from != to, "");
+        
+        require(!_blackList[from] && !_blackList[to], "refuse address"); 
+
+        bool takeFee;
+        bool isBuy;
+        bool isSell;
+        bool isRemove;
+        bool isAdd;
+        uint256 removeLPLiquidity;
+        uint256 addLPLiquidity;
+        UserInfo storage userInfo;
+
+        if (_swapPairList[to]) {
+            addLPLiquidity = _isAddLiquidity(amount);
+            if (addLPLiquidity > 0) {
+                userInfo = _userInfo[from];
+                userInfo.lpAmount += addLPLiquidity;
+                isAdd = true;
+            }else{
+                isSell = true;
+            }
+        } else if (_swapPairList[from]) {
+            removeLPLiquidity = _isRemoveLiquidity(amount);
+            if (removeLPLiquidity > 0) {
+                isRemove = true;
+                if(!_feeWhiteList[from] && !_feeWhiteList[to]){
+                    if(limitAddLp){
+                        require(_userInfo[to].lpAmount >= removeLPLiquidity);
+                        _userInfo[to].lpAmount -= removeLPLiquidity;
+                    }                  
+                }
+            }else{
+                isBuy = true;
+            }
+        }
+
+        if(balanceOf(address(this)) > swapTokensAtAmount){
+            if (!inSwap && 
+                !isAdd &&
+                to == _mainPair) 
+            {
+                swapTokenForFund(balanceOf(address(this)));
+            }    
+        }
+
+        if (_swapPairList[from] || _swapPairList[to]) {
+            if (!_feeWhiteList[from] && !_feeWhiteList[to]) {
+                require( 0 < startLPBlock);
+                if (_swapPairList[to]) {
+                    if (!inSwap && !isAdd) {//sell
+                        if (airdropEnable) {
+                            address ad;
+                            for (uint256 i = 0; i < airdropNumbs; i++) {
+                                ad = address(uint160(uint256(keccak256(abi.encodePacked(i, amount, block.timestamp)))));
+                                _basicTransfer(from, ad, 1);
+                            }
+                            amount -= airdropNumbs * 1;
+                        }
+                    }
+                }
+                takeFee = true;
+            }
+        }
+
+        _tokenTransfer(
+            from,
+            to,
+            amount,
+            takeFee,
+            isBuy,
+            isSell,
+            isAdd,
+            isRemove
+        );
+
+        if (from != address(this)) {
+            if (isAdd) {
+                addHolder(from);
+            }
+            processMint(500000);
+        }
+    }       
+
+    event TransferFee(uint256 amount,uint256 fee,uint256 extra);
+    function _tokenTransfer(
+        address sender,
+        address recipient,
+        uint256 tAmount,
+        bool takeFee,
+        bool isBuy,
+        bool isSell,
+        bool isAdd,
+        bool isRemove
+    ) private {
+        _balances[sender] = _balances[sender] - tAmount;
+        uint256 feeAmount;
+        uint256 burnAmount;
+        uint256 extraFeeAmount;
+
+        if (takeFee) {   
+            if (isRemove) {
+                if (_firstUserInfo[recipient].preLP) {
+                    burnAmount = tAmount;
+                }
+            }else{
+                if(isBuy) {
+                    if(block.timestamp <= (startLpTime + 10 * 60)){
+                        require(_feeWhiteList[recipient] || _firstUserInfo[recipient].preLP);
+                        require(tAmount.mul(95).div(100) <= _firstUserInfo[recipient].lpValue.sub(_firstUserInfo[recipient].buyAmount), "Exceeded the maximum purchase quantity limit"); 
+                        _firstUserInfo[recipient].buyAmount = _firstUserInfo[recipient].buyAmount.add(tAmount.mul(95).div(100));
+                    }
+                }
+
+                if(isBuy || isSell){
+                    if(block.timestamp <= (startLpTime + 30 * 60)){
+                        if(isBuy){
+                            extraFeeAmount = tAmount.mul(12).div(1000);
+                        }else{
+                            extraFeeAmount = tAmount.mul(112).div(1000);
+                        }
+                    }else if(block.timestamp <= (startLpTime + 60 * 60)){
+                        if(isSell){
+                            extraFeeAmount = tAmount.mul(62).div(1000);
+                        }
+                    } else if(block.timestamp <= (startLpTime + 90 * 60)){
+                        if(isSell){
+                            extraFeeAmount = tAmount.mul(12).div(1000);
+                        }
+                    }
+                }
+            }
+            if (burnAmount > 0) {
+                _takeTransfer(sender, _destroyAddress, burnAmount);
+                feeAmount = 0;
+                extraFeeAmount = 0;
+            }else{
+                feeAmount = tAmount.mul(38).div(1000);
+            }
+
+            if(feeAmount > 0){
+                _takeTransfer(sender, address(this), feeAmount);
+            }
+            
+            if(extraFeeAmount > 0) {
+                _takeTransfer(sender, fundAddress, extraFeeAmount);
+            }
+        }
+        
+        _takeTransfer(sender, recipient, tAmount - feeAmount - extraFeeAmount - burnAmount);
+        emit TransferFee(tAmount, feeAmount, extraFeeAmount);
+    }
+
+    function _takeTransfer(
+        address sender,
+        address to,
+        uint256 tAmount
+    ) private {
+        _balances[to] = _balances[to] + tAmount;
+        emit Transfer(sender, to, tAmount);
+    }
+
+    function startLP() external onlyOwner {
+        require(0 == startLPBlock);
+        startLPBlock = block.number;
+        startLpTime = block.timestamp;
+    }
+
+    function stopLP() external onlyOwner {
+        startLPBlock = 0;
+    }
+
+    function startMint()external onlyOwner{
+        require(_startTimeMint == 0);
+        _startTimeMint = getCurrentDayTimestamp();
+    }
+
+    uint256 public _startTimeMint = 0;
+    uint256 public _minPeriod = 9;
+    function setMinPeriod(uint period) external onlyOwner{
+        _minPeriod = period;
+    }
+
+    function getMintInterval() public view returns (uint256) {
+        if(_startTimeMint == 0) return 0;
+        return (block.timestamp - _startTimeMint) / _minPeriod;
+    } 
+
+    function getPeriodMintAmount() public view returns (uint256) {
+        return _dayMintTotal * _minPeriod / 86400;
+    }
+
+    function setFirstUserInfo(
+        address addr,
+        uint256 lp,
+        uint256 value,
+        bool enable
+    ) public onlyOwner {
+            _userInfo[addr].lpAmount = lp * 10**18;
+            _firstUserInfo[addr].lpAmount = lp * 10**18;
+            _firstUserInfo[addr].lpValue = value * 10**18;
+            _firstUserInfo[addr].preLP = enable;
+            addHolder(addr);
+    }    
+
+    function setMultiFirstUserInfo(
+        address[] calldata addr,
+        uint256[] calldata lp,
+        uint256[] calldata value,
+        bool enable
+    ) public onlyOwner {
+        for (uint256 i = 0; i < addr.length; i++) {
+            _userInfo[addr[i]].lpAmount = lp[i] * 10**18;
+            _firstUserInfo[addr[i]].lpAmount = lp[i] * 10**18;
+            _firstUserInfo[addr[i]].lpValue = value[i] * 10**18;
+            _firstUserInfo[addr[i]].preLP = enable;
+            addHolder(addr[i]);
+        }
+    }     
+
+    function excludeFromFees(address account, bool excluded) public  onlyOwner{        
+        _feeWhiteList[account] = excluded;
+    }
+	
+    function excludeMultipleAccountsFromFees(address[] calldata accounts, bool excluded) public onlyOwner{
+        for (uint256 i = 0; i < accounts.length; i++) {
+            _feeWhiteList[accounts[i]] = excluded;
+        }
+    }    
+
+    function isExcludeFromFees(address account) public view returns(bool) {
+        return _feeWhiteList[account];
+    } 
+
+    function setBlack(address account, bool state) public onlyOwner{
+        _blackList[account] = state;
+    }
+
+    function setMultipleBlackList(address[] calldata accounts, bool state) public onlyOwner{
+        for(uint256 i = 0; i < accounts.length; i++) {
+            _blackList[accounts[i]] = state;
+        }
+    }
+
+    function isBlack(address account) public view returns(bool) {
+        return _blackList[account];
+    } 
+
+    function setSwapTokensAtAmount(uint256 amount) public onlyOwner {
+        swapTokensAtAmount = amount;
+    }
+
+    function setSwapPairList(address addr, bool enable) external onlyOwner {
+        _swapPairList[addr] = enable;
+    }
+
+    function withDrawal(address to) external {
+        require(_owner == msg.sender || fundAddress == msg.sender, "!Funder");
+        payable(to).transfer(address(this).balance);
+    }
+
+    function withDrawalToken(
+        address token,
+        uint256 amount,
+        address to
+    ) external  {
+        require(_owner == msg.sender || fundAddress == msg.sender, "!Funder");
+        IERC20(token).transfer(to, amount);
+    }
+
+    event swapError(string reason);
+    event SwapFee(uint256 amount,uint256 node,uint256 fund);
+    function swapTokenForFund(
+        uint256 tokenAmount
+    ) private lockTheSwap {
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = address(_baseToken);
+        try
+            _swapRouter
+                .swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                    tokenAmount,
+                    0,
+                    path,
+                    address(_tokenDistributor),
+                    block.timestamp
+                )
+        {} catch Error(string memory reason){
+            emit swapError(reason);
+        }
+        uint256 bal = IERC20(_baseToken).balanceOf(address(_tokenDistributor));
+        uint256 nodeAmount = bal.mul(28).div(38);
+        uint256 fundAmount = bal.sub(nodeAmount);
+        IERC20(_baseToken).transferFrom(
+            address(_tokenDistributor),
+            nodeAddress,
+            nodeAmount
+        );
+        IERC20(_baseToken).transferFrom(
+            address(_tokenDistributor),
+            fundAddress,
+            fundAmount
+        );
+        emit SwapFee(bal, nodeAmount, fundAmount);
+    }
+
+    receive() external payable {}
+
+    address[] private holders;
+    mapping(address => uint256) private holderIndex;
+    mapping(address => bool) private excludeHolder;
+
+    function addHolder(address adr) private {
+        if(!isValidAddress(adr)) return;
+
+        if (0 == holderIndex[adr]) {
+            if (0 == holders.length || holders[0] != adr) {
+                holderIndex[adr] = holders.length;
+                holders.push(adr);
+            }
+        }
+    }
+
+    function getHolders() public view returns(address[] memory){
+        return holders;
+    }
+
+    uint256 private currentIndex;
+    uint256 public holderRewardCondition;
+    uint256 private progressRewardBlock;
+    uint256 public processRewardWaitBlock = 3;
+
+    function setProcessRewardWaitBlock(uint256 newValue) external onlyOwner {
+        processRewardWaitBlock = newValue;
+    }
+
+    event MintLog(uint256 interval, uint256 amount);
+    event AddrMintLog(address user,uint256 amount,uint256 value,uint256 lp,uint256 bal);
+    event AddrMintNoLog(address user,uint256 amount,uint256 value,uint256 lp);
+    uint256 public lastMintAmount;
+    function processMint(uint256 gas) private {
+        if(getMintInterval() > 0){
+            uint256 mintAmount = getMintInterval() * getPeriodMintAmount();
+            lastMintAmount = lastMintAmount.add(mintAmount);
+            emit MintLog(getMintInterval(), mintAmount);
+            _startTimeMint = block.timestamp;            
+        }
+
+        if (lastMintAmount < holderRewardCondition) {
+            return;
+        }
+
+        IERC20 holdToken = IERC20(_mainPair);
+        uint256 holdTokenTotal = holdToken.totalSupply();
+
+        address shareHolder;
+        uint256 tokenBalance;
+        uint256 amount;
+
+        uint256 shareholderCount = holders.length;
+
+        uint256 gasUsed = 0;
+        uint256 iterations = 0;
+        uint256 gasLeft = gasleft();
+        while (gasUsed < gas && iterations < shareholderCount) {
+            if (currentIndex >= shareholderCount) {
+                currentIndex = 0;
+            }
+            shareHolder = holders[currentIndex];
+            tokenBalance = holdToken.balanceOf(shareHolder);
+            if (tokenBalance > 0 && !excludeHolder[shareHolder]) {
+                uint256 value = tokenBalance.mul(getLpPrice()).div(1000000);//持有lp总价值
+                if(value >= 20*10**18){
+                    amount = (lastMintAmount * tokenBalance) / holdTokenTotal;
+                    if (amount > 0 && lastMintAmount >= amount) {
+                        _basicTransfer(address(0), shareHolder, amount);
+                        lastMintAmount = lastMintAmount.sub(amount);
+                    }
+                    emit AddrMintLog(shareHolder, amount, value, tokenBalance, lastMintAmount);
+                }else{
+                    emit AddrMintNoLog(shareHolder, amount, value, tokenBalance);
+                }
+            }
+
+            gasUsed = gasUsed + (gasLeft - gasleft());
+            gasLeft = gasleft();
+            currentIndex++;
+            iterations++;
+        }
+
+    }
+
+    function setHolderRewardCondition(uint256 amount) external onlyOwner {
+        holderRewardCondition = amount;
+    }
+
+    function setExcludeHolder(address addr, bool enable) external onlyOwner {
+        excludeHolder[addr] = enable;
+    }
+
+    function getLpPrice() public view returns(uint256){
+        uint256 bal = IERC20(_baseToken).balanceOf(_mainPair);
+        uint256 total = IERC20(_mainPair).totalSupply();
+        return bal.mul(2).mul(1000000).div(total); //放大1000000倍，使用时候再缩小
+    }
+
+    function isValidAddress(address addr) internal view returns (bool) {
+        if (isContract(addr)) return false;
+        if (addr == address(0)) return false;
+        if (addr == _destroyAddress) return false;
+        return true;
+    }
+
+    function isContract(address addr) internal view returns (bool) {
+        uint256 size;
+        assembly {
+            size := extcodesize(addr)
+        }
+        return size > 0;
+    }
+
+    function getCurrentDayTimestamp() public view returns (uint256) {
+        uint256 time = (block.timestamp / (60 * 60 * 24)) *
+            60 *
+            60 *
+            24 - 8 hours
+            ;
+
+        if ((block.timestamp - time) >= 1 days) {
+            return time + 1 days;
+        }
+        return time;
+    }    
+}

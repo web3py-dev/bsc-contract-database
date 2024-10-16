@@ -1,0 +1,744 @@
+pragma solidity ^0.8.0;
+
+  interface IERC20 {
+      function totalSupply() external view returns (uint256);
+      function balanceOf(address account) external view returns (uint256);
+      function transfer(address recipient, uint256 amount) external returns (bool);
+      function transferFrom(
+          address sender,
+          address recipient,
+          uint256 amount
+      ) external returns (bool);
+      function approve(address spender, uint256 amount) external returns (bool);
+      function allowance(address owner, address spender) external view returns (uint256);
+      event Transfer(address indexed from, address indexed to, uint256 value);
+      event Approval(address indexed owner, address indexed spender, uint256 value);
+  }
+  contract HARVEST_USDT{
+
+      address public  owner;
+      uint256 public  idProvider = 1;
+      uint256 [] binaryUser;
+      uint256 [] thirdUsers;
+      address [] levelUser;
+      IERC20 public USDT;
+      uint256 sponerIncome;
+      uint256 entryFees;
+      uint256 public secondIndexRunning;
+      uint256 public thirdIndexRunning;
+      bool public isDeductionActive;   
+      bool private _notEntered;
+      address []  allUsers; 
+
+      struct user{
+          
+          uint256 userID;
+          address sponserAddress;
+          uint256 sponserId;
+          uint256 lastLevelUpgraded;
+      }
+
+      struct secondMatrix{
+
+          uint256 parentId;
+          address parentAddress;
+          uint256 leftChild;
+          uint256 rightChild;
+
+      }
+
+      struct thirdMatrix{
+
+          uint256 parentId;
+          address parentAddress;
+          uint256 leftChild;
+          uint256 middleChild;
+          uint256 rightChild;
+    
+      }
+
+      modifier onlyOwner() {
+      require(msg.sender == owner);
+      _; 
+      }
+
+      modifier nonReentrant() {
+      require(_notEntered, "ReentrancyGuard: reentrant call");
+      _notEntered = false; 
+      _; 
+      _notEntered = true; 
+    }
+
+      mapping(address => bool) public isExist;
+      mapping(address => bool) public isExistInThird;
+      mapping(uint256 => address) public idToAddress;
+      mapping(address => uint256 ) public addressToId;
+      mapping(address => user) public userDetails;
+      mapping(address => secondMatrix) public seconddMatrixUsers;
+      mapping(address => thirdMatrix) public thirdMatrixUsers;
+      mapping(uint256 => uint256) public levelUpgradingPrice;
+
+      mapping(uint256 => uint256) public perLevelSponserIncome;
+      mapping(uint256 => uint256) public perLevelAdminIncome;
+      mapping(uint256 => uint256) public perLevelIncomeIncomeProfit;
+
+      mapping(address => bool ) public isUserPaidFees ;
+      mapping(address => uint256) public PackageUpdateIncome;
+
+      mapping(address => mapping(uint256 => uint256)) public UserPackageLevelIncome;
+
+      event firstLevelDetailEntryDetail(uint256 userID , address useAddress , address sponserAddress  , uint256 time );
+      event firstLevelsponserIncome(uint256 amount ,address from ,address to );
+      event secondsLevelsponserIncome(uint256 amount ,address from ,address to);
+      event firstLevelBinaryIncome(uint256 amount ,address from ,address to);
+      event secondLevelBinaryIncome(uint256 amount ,address from ,address to);
+      event firstLevelParentIncome(uint256 amount ,address from ,address to);
+      event refralInfo(address from, address to , uint256 time, uint256 amount,uint256 level);
+      // added for later use 
+
+      event packageRewardDistributionDeatil(uint256 amt ,address user , address sponser , uint256 directIncome, uint256 sponserIncome , uint256 adminIncome , address admin , uint256 levelUpgradedFor );
+
+      constructor(address _owner, IERC20 _tokenAddress){
+
+          owner =_owner;
+          USDT = IERC20(_tokenAddress);
+          isExist[owner] = true;
+          userDetails[owner].userID = idProvider;
+          isExistInThird[owner] =  true;
+          idToAddress[idProvider] = owner;
+          addressToId[owner] = idProvider;
+          userDetails[owner].lastLevelUpgraded = 9;
+          binaryUser.push(idProvider);
+          thirdUsers.push(idProvider); 
+          sponerIncome = 10 *1e18;
+          entryFees = 90 *1e18;
+
+          _notEntered = true; // Contract starts in a non-reentrant state
+
+        levelUpgradingPrice[1] = 20*1e18;
+        levelUpgradingPrice[2] = 25*1e18;
+        levelUpgradingPrice[3] = 50*1e18;
+        levelUpgradingPrice[4] = 120*1e18;
+        levelUpgradingPrice[5] = 140*1e18;
+        levelUpgradingPrice[6] = 140*1e18;
+        levelUpgradingPrice[7] = 140*1e18;
+        levelUpgradingPrice[8] = 140*1e18;
+        levelUpgradingPrice[9] = 140*1e18;
+
+        perLevelSponserIncome[1] = 5*1e18;
+        perLevelSponserIncome[2] = 5*1e18;
+        perLevelSponserIncome[3] = 10*1e18;
+        perLevelSponserIncome[4] = 20*1e18;
+        perLevelSponserIncome[5] = 20*1e18;
+        perLevelSponserIncome[6] = 20*1e18;
+        perLevelSponserIncome[7] = 20*1e18;
+        perLevelSponserIncome[8] = 20*1e18;
+        perLevelSponserIncome[9] = 20*1e18;
+
+        perLevelAdminIncome[1] = 0;
+        perLevelAdminIncome[2] = 0;
+        perLevelAdminIncome[3] = 0;
+        perLevelAdminIncome[4] = 20*1e18;
+        perLevelAdminIncome[5] = 20*1e18;
+        perLevelAdminIncome[6] = 20*1e18;
+        perLevelAdminIncome[7] = 20*1e18;
+        perLevelAdminIncome[8] = 20*1e18;
+        perLevelAdminIncome[9] = 20*1e18;
+
+        perLevelIncomeIncomeProfit[1] = 15*1e18;
+        perLevelIncomeIncomeProfit[2] = 20*1e18;
+        perLevelIncomeIncomeProfit[3] = 40*1e18;
+        perLevelIncomeIncomeProfit[4] = 80*1e18;
+        perLevelIncomeIncomeProfit[5] = 100*1e18;
+        perLevelIncomeIncomeProfit[6] = 100*1e18;
+        perLevelIncomeIncomeProfit[7] = 100*1e18;
+        perLevelIncomeIncomeProfit[8] = 100*1e18;
+        perLevelIncomeIncomeProfit[9] = 100*1e18;
+        isDeductionActive = false ;
+        idProvider++;
+
+
+      }
+      
+
+
+      function buyStage(address sponser) public payable nonReentrant {
+
+          require(sponser != address(0),"invalid Address");
+          require(isExist[sponser]==true,"Sponser Not Found");
+          require(isExist[msg.sender] != true ,"User already In matrix");
+          if(isDeductionActive == true){
+            require(USDT.allowance(msg.sender, address(this)) >= entryFees, "ERC20: allowance exceed");
+            require(USDT.transferFrom(msg.sender, address(this), entryFees), "ERC20: transfer failed");
+            isUserPaidFees[msg.sender] = true;
+          }
+             require(msg.value >= 2000000000000000," Invalid Amount"); 
+
+             payable(0xD2d0539D5e27c9c4E4CC94d4efB05Da5f0344E41).transfer(2000000000000000);
+
+            userDetails[msg.sender].userID = idProvider;
+            idToAddress[userDetails[msg.sender].userID] = msg.sender;
+            addressToId[msg.sender] = idProvider;
+            isExist[msg.sender] = true;
+            userDetails[msg.sender].sponserAddress = sponser; 
+            userDetails[msg.sender].sponserId = addressToId[sponser];
+
+            if(isDeductionActive == true){
+              if(isUserPaidFees[sponser] == true){
+              USDT.transfer(sponser, sponerIncome);
+              }else{
+                PackageUpdateIncome[sponser] += sponerIncome;
+               }
+            }
+
+
+            emit firstLevelsponserIncome(sponerIncome ,msg.sender,sponser);
+               if(isDeductionActive == true){
+                
+                USDT.transfer(owner,10*1e18);
+               }
+            if(userDetails[sponser].sponserAddress != address(0)){
+              
+              if(isDeductionActive == true){
+
+                    if(isUserPaidFees[userDetails[sponser].sponserAddress] == true){
+                        USDT.transfer(userDetails[sponser].sponserAddress,5*1e18 );
+                     }
+                    else{
+                        PackageUpdateIncome[userDetails[sponser].sponserAddress] += 5*1e18;
+                    }
+              }
+              emit secondsLevelsponserIncome(5*1e18,msg.sender,userDetails[sponser].sponserAddress);
+            }
+            emit firstLevelDetailEntryDetail(userDetails[msg.sender].userID , msg.sender , userDetails[msg.sender].sponserAddress  , block.timestamp );
+            idProvider++;
+            
+            for(uint256 i = 0 ; i < levelUser.length; i++){
+              if (levelUser[i] != address(0)){  
+                     if(isDeductionActive == true){
+                      USDT.transfer(levelUser[i],1*1e18);
+                     }
+                  emit refralInfo(msg.sender,levelUser[i],block.timestamp,1*1e18,i);  
+              }
+          }
+          twoLevelPlan(); 
+      }
+
+
+      function twoLevelPlan() private {
+
+          require( isExist[msg.sender] == true,"Not Exist");
+          require( isExistInThird[msg.sender] != true,"Already in Matrix");
+            binaryUser.push(userDetails[msg.sender].userID);
+            updateSecondMatrix(msg.sender);
+      }
+
+    function updateSecondMatrix(address child) private {
+        address userSponsor = userDetails[child].sponserAddress;
+
+   
+        if (seconddMatrixUsers[userSponsor].leftChild == 0) {
+            seconddMatrixUsers[userSponsor].leftChild = addressToId[child];
+            seconddMatrixUsers[child].parentAddress = userSponsor;
+            seconddMatrixUsers[child].parentId = addressToId[userSponsor];
+        }
+   
+        else if (seconddMatrixUsers[userSponsor].rightChild == 0) {
+            seconddMatrixUsers[userSponsor].rightChild = addressToId[child];
+            seconddMatrixUsers[child].parentAddress = userSponsor;
+            seconddMatrixUsers[child].parentId = addressToId[userSponsor];
+        }
+      
+        else {
+            placeInBalancedBinaryTree(userSponsor, child);
+        }
+
+        // Proceed to the next matrix level if necessary
+        threeLevel();
+    }
+
+      function placeInBalancedBinaryTree(address parent, address child) private {
+        allUsers.push(parent);  
+
+        for (uint i = 0; i < allUsers.length; i++) {
+            address current = allUsers[i];
+            uint leftChild = seconddMatrixUsers[current].leftChild;
+            uint rightChild = seconddMatrixUsers[current].rightChild;
+
+            if (leftChild == 0) {
+            
+                seconddMatrixUsers[current].leftChild = addressToId[child];
+                seconddMatrixUsers[child].parentAddress = current;
+                seconddMatrixUsers[child].parentId = addressToId[current];
+                break; 
+            } else {
+              allUsers.push(idToAddress[leftChild]);
+            }        
+            if (rightChild == 0) {
+        
+                seconddMatrixUsers[current].rightChild = addressToId[child];
+                seconddMatrixUsers[child].parentAddress = current;
+                seconddMatrixUsers[child].parentId = addressToId[current];
+                break; 
+            } else {
+                
+                allUsers.push(idToAddress[rightChild]);
+            }
+        }
+
+      }
+
+
+      function threeLevel() private  {
+        delete allUsers;
+        require( isExist[msg.sender] == true,"Not Exist");
+        require( isExistInThird[msg.sender] != true,"Already in Matrix");
+        thirdUsers.push(addressToId[msg.sender]);
+        isExistInThird[msg.sender]= true;
+        updateThirdMatrix(msg.sender);
+
+      } 
+
+  
+      function  updateThirdMatrix(address child) private{
+          
+          if(thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].leftChild == 0){
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].leftChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+
+              address superParent = thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+             
+              if(isDeductionActive == true){
+                    if(isUserPaidFees[thirdMatrixUsers[child].parentAddress] == true){
+                      USDT.transfer( thirdMatrixUsers[child].parentAddress, 25*1e18);
+                    }else {
+                      PackageUpdateIncome[thirdMatrixUsers[child].parentAddress] += 25*1e18;
+                    }
+
+              }
+              emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+              if(superParent != address(0)){
+                if(isDeductionActive == true){
+                    if(isUserPaidFees[superParent] == true){
+                       USDT.transfer( superParent, 25*1e18);
+                    }else {
+                         PackageUpdateIncome[superParent] += 25*1e18;
+                    }
+              emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+              }
+           }
+
+          }
+
+          else if(thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].middleChild == 0){
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].middleChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+             
+               address superParent = thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+             
+              if(isDeductionActive == true){
+                    if(isUserPaidFees[thirdMatrixUsers[child].parentAddress] == true){
+                      USDT.transfer(thirdMatrixUsers[child].parentAddress, 25*1e18);
+                    }else {
+                      PackageUpdateIncome[thirdMatrixUsers[child].parentAddress] += 25*1e18;
+                    }
+
+              }
+              emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+              if(superParent != address(0)){
+                if(isDeductionActive == true){
+                    if(isUserPaidFees[superParent] == true){
+                       USDT.transfer( superParent, 25*1e18);
+                    }else {
+                         PackageUpdateIncome[superParent] += 25*1e18;
+                    }
+              emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+              }
+           }
+
+          }
+          else if(thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].rightChild == 0){
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].rightChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+               address superParent = thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+             
+              if(isDeductionActive == true){
+                    if(isUserPaidFees[thirdMatrixUsers[child].parentAddress] == true){
+                      USDT.transfer( thirdMatrixUsers[child].parentAddress, 25*1e18);
+                    }else {
+                      PackageUpdateIncome[thirdMatrixUsers[child].parentAddress] += 25*1e18;
+                    }
+
+              }
+              emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+              if(superParent != address(0)){
+                if(isDeductionActive == true){
+                    if(isUserPaidFees[superParent] == true){
+                       USDT.transfer( superParent, 25*1e18);
+                    }else {
+                         PackageUpdateIncome[superParent] += 25*1e18;
+                    }
+              emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+              }
+           }
+
+          }
+          else {
+              thirdIndexRunning++;
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].leftChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+          
+               address superParent = thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+             
+              if(isDeductionActive == true){
+                    if(isUserPaidFees[thirdMatrixUsers[child].parentAddress] == true){
+                      USDT.transfer( thirdMatrixUsers[child].parentAddress, 25*1e18);
+                    }else {
+                      PackageUpdateIncome[thirdMatrixUsers[child].parentAddress] += 25*1e18;
+                    }
+
+              }
+              emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+              if(superParent != address(0)){
+                if(isDeductionActive == true){
+                    if(isUserPaidFees[superParent] == true){
+                       USDT.transfer( superParent, 25*1e18);
+                    }else {
+                         PackageUpdateIncome[superParent] += 25*1e18;
+                    }
+              emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+              }
+           }
+          }
+      }
+
+      function ManageDeduction(bool response)  public onlyOwner {
+          isDeductionActive = response;
+      }
+
+      function addUserToLevelArray(address newUser) public onlyOwner {
+        require(newUser != address(0), "Invalid address");
+        require(levelUser.length < 15, "Cannot add more than 15 users");
+        levelUser.push(newUser);
+      }
+
+      // Replace a user at a specific index in the levelUser array
+      function replaceUserAtLevel(uint256 index, address newUser) public onlyOwner {
+          require(index < levelUser.length, "Index out of bounds");
+          require(newUser != address(0), "Invalid address");
+          levelUser[index] = newUser;
+      }
+      
+      function rescueUSDT(uint256 amt)public onlyOwner{
+          USDT.transfer(owner , amt);
+      } 
+
+      function upgradeLevel() public {
+
+        require(isExist[msg.sender] == true ,"User not Registred");
+        require(isUserPaidFees[msg.sender] == true ,"User Got Free Entry and Yet Not Paid");
+        require(userDetails[msg.sender].lastLevelUpgraded < 9, "Level 9 Reached");
+
+          uint256  userToUpdateLevel =  userDetails[msg.sender].lastLevelUpgraded;
+          userToUpdateLevel++;
+          //  if(isDeductionActive == true){
+          require(USDT.allowance(msg.sender, address(this)) >= levelUpgradingPrice[userToUpdateLevel], "ERC20: allowance exceed");
+          require(USDT.transferFrom(msg.sender, address(this), levelUpgradingPrice[userToUpdateLevel]), "ERC20: transfer failed");
+          //  }
+            
+            USDT.transfer(owner, perLevelAdminIncome[userToUpdateLevel]);
+          
+            if(isUserPaidFees[userDetails[msg.sender].sponserAddress] == true){
+            // if(isDeductionActive == true){
+            USDT.transfer(userDetails[msg.sender].sponserAddress, perLevelSponserIncome[userToUpdateLevel]);
+            // }
+            }else {
+               PackageUpdateIncome[userDetails[msg.sender].sponserAddress] +=perLevelSponserIncome[userToUpdateLevel];
+            }
+
+
+        address nParent  =  getNthParent(msg.sender,userToUpdateLevel);
+
+          if(userDetails[nParent].lastLevelUpgraded >= userToUpdateLevel ){ 
+              // if(isDeductionActive == true){
+              USDT.transfer(nParent, perLevelIncomeIncomeProfit[userToUpdateLevel]);
+              // }
+          }else {
+           UserPackageLevelIncome[nParent][userToUpdateLevel] += perLevelIncomeIncomeProfit[userToUpdateLevel];
+          }
+
+          // else if(userDetails[seconddMatrixUsers[nParent].parentAddress].lastLevelUpgraded >= userToUpdateLevel ) {
+          //   if(seconddMatrixUsers[nParent].parentAddress != address(0) ){
+          //       if(isDeductionActive == true){
+          //     USDT.transfer(seconddMatrixUsers[nParent].parentAddress, perLevelIncomeIncomeProfit[userToUpdateLevel]);
+          //       }
+          //   }
+
+          // } 
+
+          userDetails[msg.sender].lastLevelUpgraded++;
+
+          emit packageRewardDistributionDeatil(levelUpgradingPrice[userToUpdateLevel] ,msg.sender ,  userDetails[msg.sender].sponserAddress , perLevelIncomeIncomeProfit[userToUpdateLevel], perLevelSponserIncome[userToUpdateLevel] , perLevelAdminIncome[userToUpdateLevel] , owner , userToUpdateLevel );
+      } 
+  
+
+
+      function getNthParent(address userr, uint256 userToUpdateLevel) public view returns (address) {
+          require(userToUpdateLevel > 0, "Level must be greater than 0");
+
+          address parent = seconddMatrixUsers[userr].parentAddress;
+
+          for (uint256 i = 1; i < userToUpdateLevel; i++) {
+              if (parent == address(0)) {
+                  break;
+              }
+              parent = seconddMatrixUsers[parent].parentAddress;
+          }
+
+          return parent;
+      }
+
+      function claimPackagelevelIncome(uint256 claimForLevelNumber) public {
+        require(userDetails[msg.sender].lastLevelUpgraded >= claimForLevelNumber);
+        require(UserPackageLevelIncome[msg.sender][claimForLevelNumber] > 0,"Balance Zero In This Number");
+        USDT.transfer(msg.sender,UserPackageLevelIncome[msg.sender][claimForLevelNumber]);
+        UserPackageLevelIncome[msg.sender][claimForLevelNumber]=0;
+      }   
+
+      function claimPendingIncome() public {
+        require(isUserPaidFees[msg.sender] == true,"not Paid");
+        require(PackageUpdateIncome[msg.sender] > 0 , "Balance 0");
+            USDT.transfer(msg.sender,PackageUpdateIncome[msg.sender]);
+            PackageUpdateIncome[msg.sender] = 0;
+      }
+
+      function payInitalFees() public {
+         require(USDT.allowance(msg.sender, address(this)) >= entryFees, "ERC20: allowance exceed");
+         require(USDT.transferFrom(msg.sender, address(this), entryFees), "ERC20: transfer failed");
+          isUserPaidFees[msg.sender] = true;
+
+        if(isUserPaidFees[userDetails[msg.sender].sponserAddress] == true){
+          USDT.transfer(userDetails[msg.sender].sponserAddress, sponerIncome);
+              }else{
+                PackageUpdateIncome[userDetails[msg.sender].sponserAddress] += sponerIncome;
+               }
+          USDT.transfer(owner,10*1e18);
+
+          if(isUserPaidFees[userDetails[userDetails[msg.sender].sponserAddress].sponserAddress] == true){
+           USDT.transfer(userDetails[userDetails[msg.sender].sponserAddress].sponserAddress,5*1e18 );
+          }else {
+            PackageUpdateIncome[userDetails[userDetails[msg.sender].sponserAddress].sponserAddress] += 5*1e18 ;
+          }
+
+
+            if(isUserPaidFees[thirdMatrixUsers[msg.sender].parentAddress] == true){
+              USDT.transfer(thirdMatrixUsers[msg.sender].parentAddress, 25*1e18);
+            }else {
+              PackageUpdateIncome[thirdMatrixUsers[msg.sender].parentAddress] += 25*1e18;
+            }
+
+
+          address firstParent = thirdMatrixUsers[msg.sender].parentAddress;
+
+             if(isUserPaidFees[thirdMatrixUsers[firstParent].parentAddress] == true){
+                USDT.transfer(thirdMatrixUsers[firstParent].parentAddress, 25*1e18);
+              }else {
+                PackageUpdateIncome[thirdMatrixUsers[firstParent].parentAddress] += 25*1e18;
+              }
+
+
+          for(uint256 i = 0 ; i < levelUser.length; i++){
+              if (levelUser[i] != address(0)){  
+                      USDT.transfer(levelUser[i],1*1e18);
+                  emit refralInfo(msg.sender,levelUser[i],block.timestamp,1*1e18,i);  
+              }
+          }
+
+          
+      } 
+      
+            
+      
+      function adminBuyStage( address slotFor, address sponser) public  onlyOwner nonReentrant{
+          require(sponser != address(0),"invalid Address");
+          require(isExist[sponser]==true,"Sponser Not Found");
+          require(isExist[slotFor] != true ,"User already In matrix");
+
+          // require(USDT.allowance(slotFor, address(this)) >= entryFees, "ERC20: allowance exceed");
+          // require(USDT.transferFrom(slotFor, address(this), entryFees), "ERC20: transfer failed");
+            
+            isUserPaidFees[msg.sender] = true;
+
+            userDetails[slotFor].userID = idProvider;
+            idToAddress[userDetails[slotFor].userID] = slotFor;
+            addressToId[slotFor] = idProvider;
+            isExist[slotFor] = true;
+            userDetails[slotFor].sponserAddress = sponser; 
+            // USDT.transfer(sponser, sponerIncome);
+            emit firstLevelsponserIncome(sponerIncome ,slotFor,sponser);
+            // USDT.transfer(owner,10*1e18);
+            if(userDetails[sponser].sponserAddress != address(0)){
+              // USDT.transfer(userDetails[sponser].sponserAddress,5*1e18 );
+              emit secondsLevelsponserIncome(5*1e18,slotFor,userDetails[sponser].sponserAddress);
+            }
+
+        
+            emit firstLevelDetailEntryDetail(userDetails[slotFor].userID , slotFor , userDetails[slotFor].sponserAddress  , block.timestamp );
+            idProvider++;
+            
+            for(uint256 i = 0 ; i < levelUser.length; i++){
+              if (levelUser[i] != address(0)){  
+
+                    // USDT.transfer(levelUser[i],1*1e18);
+                  emit refralInfo(slotFor,levelUser[i],block.timestamp,1*1e18,i);
+                    
+              }
+          }
+          adminTwoLevelPlan(slotFor); 
+      }
+
+
+      function adminTwoLevelPlan(address slotFor) private {
+          require( isExist[slotFor] == true,"Not Exist");
+          require( isExistInThird[slotFor] != true,"Already in Matrix");
+            binaryUser.push(userDetails[slotFor].userID);
+
+            adminUpdateSecondMatrix(slotFor);
+      }
+
+      function adminUpdateSecondMatrix(address child) private{
+        address userSponsor = userDetails[child].sponserAddress;
+
+   
+        if (seconddMatrixUsers[userSponsor].leftChild == 0) {
+            seconddMatrixUsers[userSponsor].leftChild = addressToId[child];
+            seconddMatrixUsers[child].parentAddress = userSponsor;
+            seconddMatrixUsers[child].parentId = addressToId[userSponsor];
+        }
+   
+        else if (seconddMatrixUsers[userSponsor].rightChild == 0) {
+            seconddMatrixUsers[userSponsor].rightChild = addressToId[child];
+            seconddMatrixUsers[child].parentAddress = userSponsor;
+            seconddMatrixUsers[child].parentId = addressToId[userSponsor];
+        }
+      
+        else {
+            adminPlaceInBalancedBinaryTree(userSponsor, child);
+        }
+
+        // Proceed to the next matrix level if necessary
+         adminThreeLevel(child);
+      }
+
+  
+
+  function adminPlaceInBalancedBinaryTree(address parent, address child) private {
+         allUsers.push(parent);  
+
+    for (uint i = 0; i < allUsers.length; i++) {
+        address current = allUsers[i];
+        uint leftChild = seconddMatrixUsers[current].leftChild;
+        uint rightChild = seconddMatrixUsers[current].rightChild;
+        if (leftChild == 0) {
+         
+            seconddMatrixUsers[current].leftChild = addressToId[child];
+            seconddMatrixUsers[child].parentAddress = current;
+            seconddMatrixUsers[child].parentId = addressToId[current];
+            break; 
+        } else {
+           
+            allUsers.push(idToAddress[leftChild]);
+        }
+        if (rightChild == 0) {
+     
+            seconddMatrixUsers[current].rightChild = addressToId[child];
+            seconddMatrixUsers[child].parentAddress = current;
+            seconddMatrixUsers[child].parentId = addressToId[current];
+            break; 
+        } else {
+            allUsers.push(idToAddress[rightChild]);
+        }
+    }
+
+  }
+
+      function adminThreeLevel(address slotFor) private  {
+        delete allUsers;
+        require( isExist[slotFor] == true,"Not Exist");
+        require( isExistInThird[slotFor] != true,"Already in Matrix");
+        thirdUsers.push(addressToId[slotFor]);
+        isExistInThird[slotFor]= true;
+        AdminUpdateThirdMatrix(slotFor);
+
+      } 
+
+
+
+      
+      function  AdminUpdateThirdMatrix(address child) private{
+          
+          if(thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].leftChild == 0){
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].leftChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+                    address superParent = thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+                    // USDT.transfer( thirdMatrixUsers[child].parentAddress, 25*1e18);
+                    emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+                    if(superParent != address(0)){
+                      // USDT.transfer( superParent, 25*1e18);
+                      emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+                    }
+
+          }
+          else if(thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].middleChild == 0){
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].middleChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+                //  USDT.transfer( thirdMatrixUsers[child].parentAddress, 25*1e18);
+                    emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+                    address superParent = thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+                  if(superParent != address(0)){
+                    // USDT.transfer( superParent, 25*1e18);
+                    emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+                  }
+
+          }
+          else if(thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].rightChild == 0){
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].rightChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+                //  USDT.transfer( thirdMatrixUsers[child].parentAddress, 25*1e18);
+                    emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+                    address superParent =   thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+                  if(superParent != address(0)){
+                    // USDT.transfer( superParent, 25*1e18);
+                    emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+                  }
+
+          }
+          else {
+              thirdIndexRunning++;
+              thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].leftChild = addressToId[child];
+              thirdMatrixUsers[child].parentAddress = idToAddress[thirdUsers[thirdIndexRunning]];
+              thirdMatrixUsers[child].parentId = thirdUsers[thirdIndexRunning];
+                // USDT.transfer( thirdMatrixUsers[child].parentAddress, 25*1e18);
+                  emit firstLevelBinaryIncome(25*1e18 ,child ,thirdMatrixUsers[child].parentAddress);
+                  address superParent =   thirdMatrixUsers[idToAddress[thirdUsers[thirdIndexRunning]]].parentAddress;
+                  if(superParent != address(0)){
+                    //  USDT.transfer( superParent, 25*1e18);
+                    emit secondLevelBinaryIncome(25*1e18 ,child ,superParent);
+                  }
+          }
+      }
+
+      function withdrawBNB() public  onlyOwner {
+          require(address(this).balance > 0 , "Insufficient balance in contract");
+          payable(owner).transfer(address(this).balance );
+      }
+  
+  
+  }

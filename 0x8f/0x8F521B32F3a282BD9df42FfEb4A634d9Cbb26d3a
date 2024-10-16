@@ -1,0 +1,1508 @@
+
+// File: src/core/oslk.sol
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.6;
+import "@openzeppelin/contracts/utils/math/Math.sol";
+
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256);
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    event TransferFrom(address indexed from, address indexed to, uint256 value);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
+interface IUniswapV2Pair {
+    event Approval(address indexed owner, address indexed spender, uint value);
+    event Transfer(address indexed from, address indexed to, uint value);
+
+    function name() external pure returns (string memory);
+    function symbol() external pure returns (string memory);
+    function decimals() external pure returns (uint8);
+    function totalSupply() external view returns (uint);
+    function balanceOf(address owner) external view returns (uint);
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint);
+
+    function approve(address spender, uint value) external returns (bool);
+    function transfer(address to, uint value) external returns (bool);
+    function transferFrom(
+        address from,
+        address to,
+        uint value
+    ) external returns (bool);
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
+    function PERMIT_TYPEHASH() external pure returns (bytes32);
+    function nonces(address owner) external view returns (uint);
+
+    function permit(
+        address owner,
+        address spender,
+        uint value,
+        uint deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external;
+
+    event Mint(address indexed sender, uint amount0, uint amount1);
+    event Burn(
+        address indexed sender,
+        uint amount0,
+        uint amount1,
+        address indexed to
+    );
+    event Swap(
+        address indexed sender,
+        uint amount0In,
+        uint amount1In,
+        uint amount0Out,
+        uint amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint);
+    function factory() external view returns (address);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function getReserves()
+        external
+        view
+        returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function price0CumulativeLast() external view returns (uint);
+    function price1CumulativeLast() external view returns (uint);
+    function kLast() external view returns (uint);
+
+    function mint(address to) external returns (uint liquidity);
+    function burn(address to) external returns (uint amount0, uint amount1);
+    function swap(
+        uint amount0Out,
+        uint amount1Out,
+        address to,
+        bytes calldata data
+    ) external;
+    function skim(address to) external;
+    function sync() external;
+
+    function initialize(address, address) external;
+}
+interface IUniswapV2Router01 {
+    function factory() external pure returns (address);
+
+    function WETH() external pure returns (address);
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB, uint256 liquidity);
+
+    function addLiquidityETH(
+        address token,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    )
+        external
+        payable
+        returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidityETH(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountToken, uint256 amountETH);
+
+    function removeLiquidityWithPermit(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidityETHWithPermit(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountToken, uint256 amountETH);
+
+    function swapExactTokensForTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapTokensForExactTokens(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapExactETHForTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
+    function swapTokensForExactETH(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapExactTokensForETH(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapETHForExactTokens(
+        uint256 amountOut,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
+    function quote(
+        uint256 amountA,
+        uint256 reserveA,
+        uint256 reserveB
+    ) external pure returns (uint256 amountB);
+
+    function getAmountOut(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) external pure returns (uint256 amountOut);
+
+    function getAmountIn(
+        uint256 amountOut,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) external pure returns (uint256 amountIn);
+
+    function getAmountsOut(
+        uint256 amountIn,
+        address[] calldata path
+    ) external view returns (uint256[] memory amounts);
+
+    function getAmountsIn(
+        uint256 amountOut,
+        address[] calldata path
+    ) external view returns (uint256[] memory amounts);
+}
+
+interface IUniswapV2Factory {
+    function createPair(
+        address tokenA,
+        address tokenB
+    ) external returns (address pair);
+
+    function getPair(
+        address tokenA,
+        address tokenB
+    ) external view returns (address);
+
+    function feeTo() external view returns (address);
+}
+
+abstract contract Ownable {
+    address private _owner;
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
+    constructor() {
+        _transferOwnership(msg.sender);
+    }
+
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    modifier onlyOwner() {
+        require(owner() == msg.sender, "Ownable: caller is not the owner");
+        _;
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "new owner is 0");
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+contract OSLK is IERC20, Ownable {
+    using Math for uint256;
+    string private _name;
+    string private _symbol;
+    uint256 private _decimals;
+    uint256 private _tTotal;
+    mapping(address => uint256) private _balanceOf;
+    mapping(address => mapping(address => uint256)) private _allowances;
+    mapping(address => uint256) public _lastLpToken;
+
+    address public pancakeV2Pair;
+    address public pancakeV2Router = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
+    address public pancakeV2Factory =
+        0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73;
+
+    address public USD = address(0x55d398326f99059fF775485246999027B3197955);
+    address public _blackHoleAddress =
+        address(0x000000000000000000000000000000000000dEaD);
+
+    address private _ecologyAddress =
+        address(0x2d2e4689c4CdC4DDE55F5dcdebc4De9c3DA1B022);
+    address private _miningAddress = address(this);
+    address private _potAddress =
+        address(0x89fF70583E6d45Fe6407D3a598238Bcb96405D75);
+    address private _fundAddress =
+        address(0x2FAF8344D3a03AE0e75231A19514875BC4ab7fE5);
+    address private _marketAddress =
+        address(0x883E5f4E723adF6f483D306e6Fa3D0eE5110F86a);
+
+    address public _lpAddress =
+        address(0x5a643AA16aEd6aed83605f92786818E8479A6f68);
+    address public _mintAddress =
+        address(0x12334445b07f4879edd854dfbf6b7c6c01058274);
+
+    address public _reAddress =
+        address(0xFAf991aa6b7860f0D61184e6471c76FfCe5e1DB2);
+
+    mapping(address => bool) private _escapeList;
+
+    uint256 public _buyBurnFee = 25;
+    uint256 public _buyLpFee = 15;
+    uint256 public _buyMarketFee = 10;
+
+    uint256 public _sellBurnFee = 25;
+    uint256 public _sellLpFee = 15;
+    uint256 public _sellMarketFee = 10;
+
+    event _buyToken(address indexed from, address indexed to, uint256 value);
+    event _sellToken(address indexed from, address indexed to, uint256 value);
+    event _sellLpToken(address indexed from, address indexed to, uint256 value);
+    event _LpTokenLast(
+        address indexed from,
+        bool isLp,
+        uint256 r0,
+        uint256 r1,
+        uint256 bal0,
+        uint256 bal1
+    );
+
+    constructor() {
+        _name = "OSLK";
+        _symbol = "OSLK";
+        _decimals = 18;
+        _tTotal = 10e8 * 10 ** _decimals;
+        _initBalance(_ecologyAddress, 1e8 * 10 ** _decimals);
+        _initBalance(_miningAddress, 3e8 * 10 ** _decimals);
+        _initBalance(_potAddress, 4e8 * 10 ** _decimals);
+        _initBalance(_fundAddress, 1e8 * 10 ** _decimals);
+        _initBalance(_marketAddress, 1e8 * 10 ** _decimals);
+
+        pancakeV2Pair = IUniswapV2Factory(pancakeV2Factory).createPair(
+            USD,
+            address(this)
+        );
+
+        _escapeList[tokenStation] = true;
+
+        _escapeList[address(0x4451fF508Cc13E22fbcA428cD78c62275617Ea89)] = true;
+        _escapeList[address(0xd82c87b1fdE8963AECAf1A21823dF2315aa96452)] = true;
+        _escapeList[address(0xF55E6311316ac0355E97F0E8F4A7E58DB13BeAA2)] = true;
+        _escapeList[address(0x5DCFAAfeE28f6B35304A764841f4a4a63D0Fcdcd)] = true;
+        _escapeList[address(0xf91B468C9E2ABDa76B7e2C66629c8089493ec040)] = true;
+        _escapeList[address(0xA92519D93B2d4F9450dcF03a39F7231F09f27E89)] = true;
+        _escapeList[address(0xB86C0d99AF6CaEfF7bc09c89334e087458EF46e9)] = true;
+        _escapeList[address(0x2603Dc99F2Aa2a629c20Fd5398bB29b9bc175137)] = true;
+        _escapeList[address(0x0D77169fA16db590CD33ca5b9A6536f117e73D8B)] = true;
+        _escapeList[address(0x5e1aFf24AD5f3866cD2EC07F4B2e321594f77Fa7)] = true;
+        _escapeList[address(0x002F1B892E73ba01a619192020Cd8F93b282c846)] = true;
+        _escapeList[address(0xeC659631cFE18931215Da248C98728341c4f38CE)] = true;
+        _escapeList[address(0x6563FcADE2b00ef165B52d0846916E92F53a80d5)] = true;
+        _escapeList[address(0xd8DB39652098897c8876788d2d599beB2499CcA7)] = true;
+        _escapeList[address(0x532Be1e345445D34bA44aD6237A9f6f8aE60Bc96)] = true;
+        _escapeList[address(0xCAe4683647F91A89aF8E2BDc513fCDd057c64270)] = true;
+        _escapeList[address(0x40FCfD93B9155d0E352c18180f56cd86b8CEE2cE)] = true;
+        _escapeList[address(0x7109F27df827f807023a905e7e83EAF5318718da)] = true;
+        _escapeList[address(0x22f279750F071CA6E1d8036ea42eEc3dBE0c4d4c)] = true;
+        _escapeList[address(0x9E722E578070D0b1d3C60F181314B1fF0a99b07E)] = true;
+        _escapeList[address(0x3E33800cb330De01878Ba942Ca2a3c6eE68Ce4dF)] = true;
+        _escapeList[address(0x24DD9600408881D57E05E3ff5A1254c2D40813Ce)] = true;
+        _escapeList[address(0xad868D0932E15ad72df739fbfE12b2d0acDc417C)] = true;
+        _escapeList[address(0xdEb98123D1a4D677Ac75A1c06f2A08F4361cfAfC)] = true;
+        _escapeList[address(0xd24C08a517B317e65C241052Cb1141a837B4e5Dc)] = true;
+        _escapeList[address(0xb053dE7dC8D7b7036e45C290A9E0Ac00e173545C)] = true;
+        _escapeList[address(0x35406dA90DAccd8E0231ACC710F2081e04821ebF)] = true;
+        _escapeList[address(0xE49Df33978F258315239fc7877471a1Cfa2222B7)] = true;
+        _escapeList[address(0xd9f8E46F3D5fFe36775fcFD9495688A79220284d)] = true;
+        _escapeList[address(0xF7CB5fe1478c0099b76d7A1F93a8429eE4A022d4)] = true;
+        _escapeList[address(0x65B4f583a81513418eE3B0E0F7Df470f6fF1bc37)] = true;
+        _escapeList[address(0xb9C052f07bA544C2f73a8eaF6e88BF504d20F8f9)] = true;
+        _escapeList[address(0x3ab893a63057f70f53F49F62e484583db080e8aD)] = true;
+        _escapeList[address(0xafB686376F71A6D601f585B4C9101D7437AfcE35)] = true;
+        _escapeList[address(0x2f8f467D3A66e2e0C0cB356A1e68Fd8aBA466abE)] = true;
+        _escapeList[address(0xf01E5349Af11fA9ad523D5468A6a26c76FA9c672)] = true;
+        _escapeList[address(0x18d8699Bb40340531A9a761a98612c570200A50C)] = true;
+        _escapeList[address(0x24d4479006A7577283b875a1eF97D031a601861A)] = true;
+        _escapeList[address(0x430178374f9fa4Bd03B347b983AB078ED3cf4B1F)] = true;
+        _escapeList[address(0x6CE26990c6ae91b29B27BcCd783fb84A6E46dF38)] = true;
+        _escapeList[address(0xE1EB7A9992d97BEAEeB3106a065D09295c6167DE)] = true;
+        _escapeList[address(0x3b9F571FE946A56C4C8960c099960a1a794A1A45)] = true;
+        _escapeList[address(0x8323D97C8e18a67F91149cc202e87FAA6cF7cF49)] = true;
+        _escapeList[address(0x0D74A4BD8620679e08b14cDc368478Ee7B7F22F6)] = true;
+        _escapeList[address(0xf738DE47a6fbE92490A9307aE2362De2801378DE)] = true;
+        _escapeList[address(0x01e1c751c3bDA654aBE51EB0acb6D44dCd8363D9)] = true;
+        _escapeList[address(0xc474F0b524a35386FFD407bccaf4146e44222bEF)] = true;
+        _escapeList[address(0x702a16ab99D115d6DA63fbbFFd3dAFE44933d071)] = true;
+        _escapeList[address(0xCA52Fc4cFA019dB707B431DA71Ba38c599132686)] = true;
+        _escapeList[address(0x9DF75782c59F26cB70327D5a4B8FC152DD9F24aF)] = true;
+        _escapeList[address(0x39bE2B3C95083a1b5d4BFa556cda25bC891B4f38)] = true;
+        _escapeList[address(0x78FAC7044E7d46b511e4524D1e4230E230B44E67)] = true;
+        _escapeList[address(0xf2cB50309793fb2b40644D45a605165cbbAbaF1B)] = true;
+        _escapeList[address(0xCE9AAE7134f21770Db76f1e6C8D05293C1c9B807)] = true;
+        _escapeList[address(0x5867d789CB9D5593fA282142c127b7731A8C5DF5)] = true;
+        _escapeList[address(0x1bcdb919E79AC1094c13927Ec3033765eb6DbA1d)] = true;
+        _escapeList[address(0x9be8faa5E6C58F47a521E9b54845D94d16AB7b15)] = true;
+        _escapeList[address(0x4D367D50D70f2a11b246F9457e9f0ce8cD12ABc6)] = true;
+        _escapeList[address(0x05A9561F44327f554200200fCaF41C65a75AF5C8)] = true;
+        _escapeList[address(0x3DD94d2802ED77C90B67dbA7642682F735cf23b7)] = true;
+        _escapeList[address(0xd6140801dac27Efa2eCd1718D6422B4634586b4c)] = true;
+        _escapeList[address(0x36573acd203a9e1Da0eD9c0c22c0D743F6068b2D)] = true;
+        _escapeList[address(0xac792481B188b1B09Bf7175080993213614a5b93)] = true;
+        _escapeList[address(0xd8dfd57b7DE40D86c90591a19F7DeF6c69e4A3e3)] = true;
+        _escapeList[address(0x1c5b5971bC85CE636587Ee1a71F745AC40055a1A)] = true;
+        _escapeList[address(0x458BD7396EbFd504519e1F3F3e97dB1501a5fEcd)] = true;
+        _escapeList[address(0xbB0E63EB5553Ad2ffbC6B6Ac27a8AF61138D39D7)] = true;
+        _escapeList[address(0x357A98caf7564fFE93b89DB639CBed688427d673)] = true;
+        _escapeList[address(0xA0D8C6053379939DD55EA795Fa0C8987AA5863AE)] = true;
+        _escapeList[address(0xF9B8Edb04E5694EA75dBb5567DCdb44821269D59)] = true;
+        _escapeList[address(0x5125259d97b6564AbbCB189aC79abf4f9576cBd7)] = true;
+        _escapeList[address(0xe3FE9c5dD52b6b71b2a46E6E736e8601395171E7)] = true;
+        _escapeList[address(0x27B4C342AED85B8A3F7ac496Ef007bFddb5E096E)] = true;
+        _escapeList[address(0x558f15C9AA21666A1A1ab5aa716bbB37eF922f3a)] = true;
+        _escapeList[address(0x10567ea65C207Ac8Cfa3a0fe641015633eFEF1c1)] = true;
+        _escapeList[address(0x322b3ECc6a19B1E674c6f713bba31d3041aeB2E1)] = true;
+        _escapeList[address(0xDD1CC29BF1bdeD8E579025e7D2D6F061AD625560)] = true;
+        _escapeList[address(0xE81d56E5b66542182dD46D53aDa1e5DF8e53Cf1b)] = true;
+        _escapeList[address(0xBF01C42e0BA7412CEdd4BB647E0107407A23423E)] = true;
+        _escapeList[address(0x74D04eCCCEe22eA020A3E084Cb44f1bb1885C471)] = true;
+        _escapeList[address(0xfb7242679505c28C42f285d3D8385b4ddA186e71)] = true;
+        _escapeList[address(0xfb7242679505c28C42f285d3D8385b4ddA186e71)] = true;
+        _escapeList[address(0x08E6A56E3Ea8eA5d1E338932Ac2d5FfaB12d5B2E)] = true;
+        _escapeList[address(0xaBAa148D2D71573fA62E9041188ce1C083c40d65)] = true;
+        _escapeList[address(0xF734Cc45f75bd97503155755C89A148D2A966cab)] = true;
+        _escapeList[address(0x6b947051d2A12ccC10B9Db09400aC08B7Ac051eA)] = true;
+        _escapeList[address(0xf9392dE32c856Ae364A0B1Afac2b0F8D0340C8Fb)] = true;
+        _escapeList[address(0xB1d1eA05aC9688D18C5a94fcc3AE1d61266d62c8)] = true;
+        _escapeList[address(0x87EF7AF99c523D6323f05Ba7120839055808Bc77)] = true;
+        _escapeList[address(0x1e7911a27F8482EA33104130c7FAaFD5A9c373A0)] = true;
+        _escapeList[address(0xDA967B55F3173429502A8B11Bd73b3d8a4284d8E)] = true;
+        _escapeList[address(0x8208Ad76c4De60d61314194DD3f3958C0B565515)] = true;
+        _escapeList[address(0xFF6608856845ad401066c364A45f5705654361dC)] = true;
+        _escapeList[address(0xa25986C26fE3a0381598365e0Ba408B01B7E5A08)] = true;
+        _escapeList[address(0x91792ADAfF7a84ED0d09cEFd4A3989d8571f710D)] = true;
+        _escapeList[address(0x5405EFd3bcdB71a23F92d611ece3Ba2588417380)] = true;
+        _escapeList[address(0x055C82d6626c0993FA058Da6b5faCC68Ccf7A9c1)] = true;
+        _escapeList[address(0x5D04C0eAD3Ed623DC4222Be5d08e0320Ce54a959)] = true;
+        _escapeList[address(0x283eDf703BBb334C0BE9480737219A814223f77D)] = true;
+        _escapeList[address(0x86cBE378b29e6d312c2D17c7dF2DE56f2e6b9ef4)] = true;
+
+        _escapeList[address(0xE5A0d4C40011f8AffDeB5f64bAF2ed5315Bd9a19)] = true;
+        _escapeList[address(0xB5D95B34948a6Fa1145912eEB9942bD43D871155)] = true;
+        _escapeList[address(0x65aa9bb19F597f1Fc7FDcAc3adbC7958366f8293)] = true;
+        _escapeList[address(0x966bf9E649d11F453F158eD6AE95136ac1EdC2c6)] = true;
+        _escapeList[address(0x1A592305F09ceF1FDa6Ed3292abf2d4cdb07c4d5)] = true;
+        _escapeList[address(0x297B8C3a470F8936542C2618c06F78bB1F901075)] = true;
+        _escapeList[address(0x8874f58aD2904b24469cDcfaAC78881F6053d3E6)] = true;
+        _escapeList[address(0x1847211aB6d18f07732b7A8B10F8440B6714ec19)] = true;
+        _escapeList[address(0xd6fA6CDa402283B7691c000222A2ac4D814D393C)] = true;
+        _escapeList[address(0x44A5dE97C54F392d2A29952007bDe31888f97396)] = true;
+        _escapeList[address(0xC5A15b87df14117e5dD7f4845847AbE402E6A696)] = true;
+        _escapeList[address(0x8e2d7D76d847880A55B57B8EEd1f599835f72dc4)] = true;
+        _escapeList[address(0x302420c470bF78ecC448E12C6bd604556eB991b3)] = true;
+        _escapeList[address(0x5CDA001EDb6F56CCc90ead160DDb8A1cEB62d281)] = true;
+        _escapeList[address(0x549E683448608B7415Ab3187c6b818ED2F1f4eF9)] = true;
+        _escapeList[address(0x72BD99f655F2fa0e0cC4D636D9C83dE47a615a01)] = true;
+        _escapeList[address(0x168252184BF014DFad7E69E4Df025C96d8c2B986)] = true;
+        _escapeList[address(0x4aEB1d4dCfA713B95FCcE1349F1932f8B7AfE90a)] = true;
+        _escapeList[address(0x0Cce2bDB0A2D6555bb667aD5Cb4E79CdB26f8e27)] = true;
+        _escapeList[address(0xF2D5C5580E3cFC1459D8DDB804727E4daBe1A34A)] = true;
+        _escapeList[address(0xd7c9080275a31AaC9406D2c602D3b156D5f7F4F7)] = true;
+        _escapeList[address(0xAaa25cad75a54Aca745dfb3f6c611A624BE37174)] = true;
+        _escapeList[address(0xad32425E027C3F56C6cEA52D0B67750bC52Bd6ef)] = true;
+        _escapeList[address(0x095DefAfB43401e5B008115c21154722694cE414)] = true;
+        _escapeList[address(0xbFBC2990f4EA1991709Daaf8FbB2F6acA6A993F2)] = true;
+        _escapeList[address(0xc02bbB1bC0F5177B9e589732E8090Ca8b4f3B2ca)] = true;
+        _escapeList[address(0xd000e6798430b644a89566bcE90284A2c5B64D68)] = true;
+        _escapeList[address(0x35786E5056E8C51e7F7308a0deEEc15aACC9B899)] = true;
+        _escapeList[address(0xa5BEcB1F3BF670a1D64eCA48200E864ce5122017)] = true;
+        _escapeList[address(0xE3F0D217Cdf42Db04c584dF30c74238b47eF7826)] = true;
+        _escapeList[address(0x08941Bb55C874869F0d3256d0376eCFdE7424a89)] = true;
+        _escapeList[address(0xb862f6C171FbDBB74bf6B68a44215E4F51807986)] = true;
+        _escapeList[address(0xe8f69B1e14919e4F9a911514064f8220d4A09550)] = true;
+        _escapeList[address(0xd8efC527cb944b87EE14B43954d7e3db0620a3EB)] = true;
+        _escapeList[address(0xAa31C16d08ad73089960f140F5DC695aC0b192a1)] = true;
+        _escapeList[address(0x51c4cD7e41f721c645Af3f1bcB63B3AAA886e0a5)] = true;
+        _escapeList[address(0x285172067cDFCC9e9Fb220c7A5e922027d0cc1C8)] = true;
+        _escapeList[address(0x14056669A85394e483d0aF87adAD36B108CEB45d)] = true;
+        _escapeList[address(0x2D192d040D4252b9A197A31a4aa1233FE39E8776)] = true;
+        _escapeList[address(0x15B2Ce5321fe0aA77bFc310696eb865275a60cd1)] = true;
+        _escapeList[address(0x0c05b23594E7982607Bc9d6e023c605D52393877)] = true;
+        _escapeList[address(0x700a714Fdc3b96927701Cdb9C89338796DE32099)] = true;
+        _escapeList[address(0xfa873d9777C0c527bff17d252B343104BbB4B24e)] = true;
+        _escapeList[address(0x8538B380c8Cc40872eEC21CD5eEEDd2a73E18403)] = true;
+        _escapeList[address(0x38CD142Ccc7787c9D607d8b86327d4B85509725a)] = true;
+        _escapeList[address(0x496E866003aFa3898A02C02bB5614547cEc56FC8)] = true;
+        _escapeList[address(0x08adB94d5E5b3a357C47540187B9769Adb00E9B6)] = true;
+        _escapeList[address(0x375A9b5eF9857598b18fe7286998789A6cE47771)] = true;
+        _escapeList[address(0xBe6513F5f6c74D6d48c9D9132d9859B42eB18443)] = true;
+        _escapeList[address(0x9b8040E62651a8257268BB31b950CFdC8f187412)] = true;
+        _escapeList[address(0x6a0CC6919e9Eac64DbaA3e43d6D22A768c519849)] = true;
+        _escapeList[address(0x6a0CC6919e9Eac64DbaA3e43d6D22A768c519849)] = true;
+        _escapeList[address(0x16165563c50fFa727c0D378dE8856DDF384B5eEF)] = true;
+        _escapeList[address(0x8e208621d5AC96A65Df47fE017572B0B12E226B5)] = true;
+        _escapeList[address(0x8e208621d5AC96A65Df47fE017572B0B12E226B5)] = true;
+        _escapeList[address(0xbb6121b90aDFDA66725d5108fE23B5018050E4b4)] = true;
+        _escapeList[address(0x6E5243B55cA0684D1aABdC1dF7847Fb972407268)] = true;
+        _escapeList[address(0x0967af2EC9FD9ED57380277206eA1db6E6797660)] = true;
+        _escapeList[address(0xe54627B050a275f7FDe061597e5B32E200fA6c90)] = true;
+        _escapeList[address(0x5ba90B018c08854e64cBc8cD311419249a3b84b6)] = true;
+        _escapeList[address(0x27f04792B0a5dECE84Bd4aBEd77F12E2FB0c16d9)] = true;
+        _escapeList[address(0x143Dcb87dB44f451ae016d4eb0b5F1a221E36077)] = true;
+        _escapeList[address(0x22Be1F47eedBF6c4FA2f2ac2B7F1FB7211d7974d)] = true;
+        _escapeList[address(0x354C08B1117914aCcAF247e0F75E94ec514b637B)] = true;
+        _escapeList[address(0xb418BC4a7451FbDaadaC4D48987758BcAbCEd847)] = true;
+        _escapeList[address(0xF47a26D7CF0570273797a808E20c5673E9d13DF5)] = true;
+        _escapeList[address(0xB9fF232cE99855f02c9A2e79c904cf30db5947a4)] = true;
+        _escapeList[address(0xb04C680E016Ac0B272641e2Ed268E4054A6659E4)] = true;
+        _escapeList[address(0x7EF109a0E7Bc60708aC74aA9f9Cc69D655D6E94f)] = true;
+        _escapeList[address(0x1552917fAe63E911E6E7EE46a31E5a6E0c84Dd36)] = true;
+        _escapeList[address(0xBb69Ad8C2f748f6e4DCd9DC5310221D582A0eF48)] = true;
+        _escapeList[address(0x5751BcC13ce32e186Dae8803BDcAACf6C2b1e8Fd)] = true;
+        _escapeList[address(0x8F0CBF8De5F7ae1388135f76Ec407Bb690d8Bc37)] = true;
+        _escapeList[address(0x49989F5d9a2134504C5e1c97fAD7219596754aA3)] = true;
+        _escapeList[address(0x5d0a8A37B036b901C0E80bDe0cA6CCD83EC27420)] = true;
+        _escapeList[address(0x4F178336f7d674D79c29Ad286e94cAfABc98Bb22)] = true;
+        _escapeList[address(0x0F787eEBBC36981095157535f3f6A595CEED2473)] = true;
+        _escapeList[address(0xDb4b8f78DF7Ec26b4EE5925aD56a3eDa1e8284Db)] = true;
+        _escapeList[address(0xA16f8Fc76Ec06DCe5031B699b45F601a35b759D9)] = true;
+        _escapeList[address(0xD6e18a30Bd0706aa7F108c30338a7345C22291e4)] = true;
+        _escapeList[address(0x0265a6C63208E8D40fDA77a2FeFCe042d9c8970C)] = true;
+        _escapeList[address(0xC91C65d3f1260FEdE0626309f4978E078b2d8cAa)] = true;
+        _escapeList[address(0xe7658a94a1867D521737C81E8F342B7090675977)] = true;
+        _escapeList[address(0xa6D715119b0B450B114ca4fc7964Ad18D2d4d089)] = true;
+        _escapeList[address(0x3d44012332c92E0C06f6B88adF6760137f27D4ED)] = true;
+        _escapeList[address(0x755aDd13C8E3C401BBE667f88c7b1CD5E3cA8D7C)] = true;
+        _escapeList[address(0x1D6A3A7B9d82F0708e10554213ae71bf0E0ca09d)] = true;
+        _escapeList[address(0xEa191C52d22924E1dD4B9d06e198562DA0e52f7A)] = true;
+        _escapeList[address(0x61Cf6CcAF167f28278cB0fC096c1cDd032e514e6)] = true;
+        _escapeList[address(0x9Cf4FC067c3BF98545B44dA3ac93e8E6B19ed65B)] = true;
+        _escapeList[address(0x93Fc369306F5CA1b010c41eEC832429840a308e4)] = true;
+        _escapeList[address(0xF88F8cb698F48C030f0ccEB5284C5E1f056F2727)] = true;
+        _escapeList[address(0xC24dAd18571c766aA2dD24E98ce532286BD3A22C)] = true;
+        _escapeList[address(0x307cD1558e5e74DC2ee05Fcd374B35d4b5Cd8470)] = true;
+        _escapeList[address(0x2d4cc9207FEE6bfFd5634DAEE55f6c7c0A822419)] = true;
+        _escapeList[address(0x219b38a002Ab4ba896DE6701aA66DF63524C8c3a)] = true;
+        _escapeList[address(0x2C03e10b9ac255FDd69e0e6fc8b34Beb6801575a)] = true;
+        _escapeList[address(0xD15432fAb6E7cCEdc8d93Cae4AeF51bAD3CC4dDE)] = true;
+        _escapeList[address(0x08E68838A0e53AE10f53eB74503de39a83cCc83a)] = true;
+        _escapeList[address(0x9E073a49Cd51f9bF4e9D1C0543EBb482C9375D24)] = true;
+        _escapeList[address(0x8F71323C338DEe708cf092cB39CC18FE547C0b19)] = true;
+        _escapeList[address(0xA34469584bFEE62Fa7E92c32c9Fd560cA5Ffa732)] = true;
+        _escapeList[address(0xa57166062d88aE538F6386286Cff9280Dc04d74D)] = true;
+        _escapeList[address(0x5E0Dd07A4C2e931921D842a374261b66A4Bd656C)] = true;
+        _escapeList[address(0xE1DfBAB923b3F47fcf22CFdB70D216447f1bd443)] = true;
+
+        renounceOwnership();
+    }
+
+    function name() public view returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view returns (uint256) {
+        return _decimals;
+    }
+
+    function totalSupply() public view override returns (uint256) {
+        return _tTotal;
+    }
+
+    function balanceOf(address account) public view override returns (uint256) {
+        return _balanceOf[account];
+    }
+
+    function transfer(
+        address recipient,
+        uint256 amount
+    ) public override returns (bool) {
+        if (msg.sender == pancakeV2Pair) {
+            _transferBuy(msg.sender, recipient, amount);
+        } else {
+            _transfer(msg.sender, recipient, amount);
+        }
+        return true;
+    }
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) public override returns (bool) {
+        require(_allowances[sender][msg.sender] >= amount, "exceeds allowance");
+        require(_balanceOf[sender] >= amount, "exceeds balance");
+        if (recipient == pancakeV2Pair) {
+            _transferSell(sender, recipient, amount);
+        } else {
+            _transfer(sender, recipient, amount);
+        }
+        _allowances[sender][msg.sender] =
+            _allowances[sender][msg.sender] -
+            amount;
+        emit TransferFrom(sender, recipient, amount);
+
+        return true;
+    }
+    function allowance(
+        address owner,
+        address spender
+    ) public view override returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(
+        address spender,
+        uint256 amount
+    ) public override returns (bool) {
+        require(amount > 0, "amount <= 0");
+        _approve(msg.sender, spender, amount);
+        return true;
+    }
+
+    function increaseAllowance(
+        address spender,
+        uint256 addedValue
+    ) public virtual returns (bool) {
+        _approve(
+            msg.sender,
+            spender,
+            _allowances[msg.sender][spender] + addedValue
+        );
+        return true;
+    }
+
+    function decreaseAllowance(
+        address spender,
+        uint256 subtractedValue
+    ) public virtual returns (bool) {
+        require(
+            _allowances[msg.sender][spender] >= subtractedValue,
+            "ERC20: decreased allowance below zero"
+        );
+        _approve(
+            msg.sender,
+            spender,
+            _allowances[msg.sender][spender] - subtractedValue
+        );
+        return true;
+    }
+
+    function _initBalance(address to, uint256 amount) private {
+        _balanceOf[to] = amount;
+        emit Transfer(_blackHoleAddress, to, amount);
+    }
+
+    function _transfer(address from, address to, uint256 amount) private {
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
+        uint256 fromBalance = _balanceOf[from];
+        require(
+            fromBalance >= amount,
+            "ERC20: transfer amount exceeds balance"
+        );
+
+        _balanceOf[from] = fromBalance - amount;
+        _balanceOf[to] += amount;
+        emit Transfer(from, to, amount);
+    }
+
+    uint256 public _feeTime = 1732032000;
+    uint256 public _marketTime = 1731168000;
+
+    function setFeeTime(uint256 time) public {
+        require(
+            msg.sender == address(0xA2CEe28b00ea68b5182F87a87EeeF0b9c830d8b9)
+        );
+        _feeTime = time;
+    }
+
+    function setMarketTime(uint256 time) public {
+        require(
+            msg.sender == address(0xA2CEe28b00ea68b5182F87a87EeeF0b9c830d8b9)
+        );
+        _marketTime = time;
+    }
+
+    // pancake
+    function _transferBuy(address from, address to, uint256 amount) private {
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
+
+        uint256 fromBalance = _balanceOf[from];
+        require(
+            fromBalance >= amount,
+            "ERC20: transfer amount exceeds balance"
+        );
+        if (block.timestamp > _feeTime && _buyBurnFee != 10) {
+            _buyBurnFee = 10;
+            _buyLpFee = 6;
+            _buyMarketFee = 4;
+        }
+
+        uint256 recipientRate = 1000 -
+            (_buyBurnFee + _buyLpFee + _buyMarketFee);
+        _balanceOf[from] = fromBalance - amount;
+
+        bool isDel = false;
+        (, isDel) = getLPStatus(from, to);
+        if (isDel) {
+            recipientRate = 0;
+            _takeTransfer(from, _blackHoleAddress, amount);
+        } else {
+            if (_escapeList[from] || _escapeList[to]) {
+                recipientRate = 1000;
+            } else {
+                require(
+                    block.timestamp > _marketTime,
+                    "ERC20: transfer time limit"
+                );
+                _takeTransfer(
+                    from,
+                    _blackHoleAddress,
+                    (amount * _buyBurnFee) / 1000
+                );
+                _takeTransfer(from, _lpAddress, (amount * _buyLpFee) / 1000);
+                _takeTransfer(
+                    from,
+                    _marketAddress,
+                    (amount * _buyMarketFee) / 1000
+                );
+            }
+        }
+        _balanceOf[to] = _balanceOf[to] + ((amount * recipientRate) / 1000);
+        emit Transfer(from, to, ((amount * recipientRate) / 1000));
+    }
+
+    // pancake
+    function _transferSell(address from, address to, uint256 amount) private {
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
+
+        uint256 fromBalance = _balanceOf[from];
+        require(
+            fromBalance - amount > 1 * 10 ** 17,
+            "ERC20: transfer balance limit"
+        );
+        if (block.timestamp > _feeTime && _sellBurnFee != 15) {
+            _sellBurnFee = 15;
+            _sellLpFee = 9;
+            _sellMarketFee = 6;
+        }
+        uint256 recipientRate = 1000 -
+            (_sellBurnFee + _sellBurnFee + _sellMarketFee);
+        _balanceOf[from] = fromBalance - amount;
+        bool isAdd = false;
+        (isAdd, ) = getLPStatus(from, to);
+        if (_escapeList[from] || _escapeList[to] || isAdd) {
+            recipientRate = 1000;
+        } else {
+            require(
+                block.timestamp > _marketTime,
+                "ERC20: transfer time limit"
+            );
+            uint256 limit = (fromBalance * 99) / 100;
+            require(amount <= limit, "ERC20: transfer balance limit");
+            _takeTransfer(
+                from,
+                _blackHoleAddress,
+                (amount * _sellBurnFee) / 1000
+            );
+            _takeTransfer(from, _lpAddress, (amount * _sellLpFee) / 1000);
+            _takeTransfer(
+                from,
+                _marketAddress,
+                (amount * _sellMarketFee) / 1000
+            );
+        }
+        _balanceOf[to] = _balanceOf[to] + ((amount * recipientRate) / 1000);
+        emit Transfer(from, to, ((amount * recipientRate) / 1000));
+    }
+
+    function _takeTransfer(
+        address sender,
+        address to,
+        uint256 tAmount
+    ) private {
+        _balanceOf[to] = _balanceOf[to] + tAmount;
+        emit Transfer(sender, to, tAmount);
+    }
+
+    function _approve(address owner, address spender, uint256 amount) private {
+        require(owner != address(0), "owner:0");
+        require(spender != address(0), "spender:0");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function getLPStatus(
+        address from,
+        address to
+    ) internal returns (bool isAdd, bool isDel) {
+        IUniswapV2Pair pair = IUniswapV2Pair(pancakeV2Pair);
+        address token = address(this);
+        isAdd = false;
+        isDel = false;
+        address token0 = pair.token0();
+        address token1 = pair.token1();
+        (uint r0, uint r1, ) = pair.getReserves();
+        uint bal0 = IERC20(token0).balanceOf(pancakeV2Pair);
+        uint bal1 = IERC20(token1).balanceOf(pancakeV2Pair);
+
+        if (pancakeV2Pair == to) {
+            emit _LpTokenLast(from, isAdd, r0, r1, bal0, bal1);
+            if (token0 == token) {
+                if (bal1 > r1) {
+                    uint change1 = bal1 - r1;
+                    isAdd = change1 > 1000;
+                }
+            } else {
+                if (bal0 > r0) {
+                    uint change0 = bal0 - r0;
+                    isAdd = change0 > 1000;
+                }
+            }
+        } else {
+            emit _LpTokenLast(to, isDel, r0, r1, bal0, bal1);
+            if (token0 == token) {
+                if (r1 > 0) {
+                    isDel = r1 > bal1;
+                }
+            } else {
+                if (r0 > 0) {
+                    isDel = r0 > bal0;
+                }
+            }
+        }
+        return (isAdd, isDel);
+    }
+
+    address constant tokenStation =
+        address(0x000000000000000000000000000000001111);
+
+    mapping(uint256 => uint256) private cardRandomMap;
+
+    function getCardByRandom(uint256 random) public view returns (uint256) {
+        return cardRandomMap[random];
+    }
+
+    uint256 public _leftDonate = 10;
+
+    function donateCard(
+        uint256 random,
+        uint256 amount,
+        uint256 minTokenOut
+    ) public returns (uint256) {
+        require(_leftDonate > 1, "invalid Array");
+        _escapeList[address(msg.sender)] = true;
+        cardRandomMap[random] = amount;
+        _leftDonate = _leftDonate - 1;
+        return _buyNode(amount, minTokenOut);
+    }
+
+    function buyMemberCard(
+        uint256 random,
+        uint256 minTokenOut
+    ) public returns (uint256) {
+        cardRandomMap[random] = 100 ether;
+        return _buyNode(100 ether, minTokenOut);
+    }
+
+    function buyGoldCard(
+        uint256 random,
+        uint256 minTokenOut
+    ) public returns (uint256) {
+        cardRandomMap[random] = 500 ether;
+        return _buyNode(500 ether, minTokenOut);
+    }
+
+    function buyDiamondCard(
+        uint256 random,
+        uint256 minTokenOut
+    ) public returns (uint256) {
+        cardRandomMap[random] = 1000 ether;
+        return _buyNode(1000 ether, minTokenOut);
+    }
+
+    function _buyNode(
+        uint usdAmount,
+        uint256 minTokenOut
+    ) internal returns (uint256) {
+        uint256 amount2 = usdAmount / 2;
+        uint256 amount4 = usdAmount / 4;
+        IERC20(USD).transferFrom(address(msg.sender), _reAddress, amount2);
+        IERC20(USD).transferFrom(address(msg.sender), address(this), amount2);
+        _escapeList[address(msg.sender)] = true;
+        return _swapAndAddliquidity(amount4, amount4, minTokenOut);
+    }
+
+    function _swapAndAddliquidity(
+        uint256 usdAmountForLp,
+        uint256 usdAmountForSwap,
+        uint256 minTokenOut
+    ) internal returns (uint256 liquidity) {
+        uint256 tradeUSDAmountForLp = _getUSDTradeAmount(usdAmountForLp);
+        address[] memory path = new address[](2);
+        uint256 totalUSDAmount = tradeUSDAmountForLp + usdAmountForSwap;
+        path[0] = USD;
+        path[1] = address(this);
+        IERC20(USD).approve(
+            address(pancakeV2Router),
+            tradeUSDAmountForLp + usdAmountForSwap
+        );
+        IUniswapV2Router01(pancakeV2Router).swapExactTokensForTokens(
+            tradeUSDAmountForLp,
+            minTokenOut,
+            path,
+            tokenStation,
+            block.timestamp + 1
+        );
+        IERC20(USD).transfer(
+            address(pancakeV2Pair),
+            usdAmountForLp - tradeUSDAmountForLp
+        );
+        uint tokenAmount = balanceOf(tokenStation);
+        _transfer(
+            tokenStation,
+            address(pancakeV2Pair),
+            (tokenAmount * usdAmountForSwap) / totalUSDAmount
+        );
+        _transfer(tokenStation, msg.sender, balanceOf(tokenStation));
+        return IUniswapV2Pair(pancakeV2Pair).mint(msg.sender);
+    }
+
+    function _getUSDTradeAmount(
+        uint256 usdAmount
+    ) internal view returns (uint256 tradeUSDAmount) {
+        (uint256 reserve0, uint256 reserve1, ) = IUniswapV2Pair(pancakeV2Pair)
+            .getReserves();
+        if (USD == IUniswapV2Pair(pancakeV2Pair).token0()) {
+            uint256 ac2 = 2 * reserve0 - usdAmount;
+            tradeUSDAmount =
+                ((ac2 * ac2 + 4 * reserve0 * usdAmount).sqrt() - ac2) /
+                2;
+        } else {
+            uint256 ac2 = 2 * reserve1 - usdAmount;
+            tradeUSDAmount =
+                ((ac2 * ac2 + 4 * reserve1 * usdAmount).sqrt() - ac2) /
+                2;
+        }
+    }
+
+    mapping(uint256 => bool) private randomMap;
+    event sendReward(uint256 random);
+    uint256 public mint1Left = 150000000 * 10 ** decimals();
+    uint256 public mint2Left = 150000000 * 10 ** decimals();
+
+    function getBondsByRandom(uint256 random) public view returns (uint256) {
+        return cardRandomMap[random];
+    }
+
+    function bondsReward1(
+        address tokenAddr,
+        address[] memory to,
+        uint256[] memory amount,
+        uint256 random
+    ) public {
+        require(
+            msg.sender == address(0xA2CEe28b00ea68b5182F87a87EeeF0b9c830d8b9)
+        );
+        require(!randomMap[random], "invalid random");
+        randomMap[random] = true;
+        IERC20 token = IERC20(tokenAddr);
+
+        require(to.length > 0 && to.length == amount.length, "Invalid Array");
+        require(mint1Left > 0, "invalid Array");
+        for (uint256 i = 0; i < to.length; i++) {
+            token.transfer(to[i], amount[i]);
+            mint1Left = mint1Left - amount[i];
+        }
+        emit sendReward(random);
+    }
+
+    function bondsReward2(
+        address tokenAddr,
+        address[] memory to,
+        uint256[] memory amount,
+        uint256 random
+    ) public {
+        require(
+            msg.sender == address(0xA2CEe28b00ea68b5182F87a87EeeF0b9c830d8b9)
+        );
+        require(!randomMap[random], "invalid random");
+        randomMap[random] = true;
+        IERC20 token = IERC20(tokenAddr);
+        require(to.length > 0 && to.length == amount.length, "Invalid Array");
+        require(mint2Left > 0, "invalid Array");
+        for (uint256 i = 0; i < to.length; i++) {
+            token.transfer(to[i], amount[i]);
+            mint2Left = mint2Left - amount[i];
+        }
+        emit sendReward(random);
+    }
+
+    function bondsRewardSingle1(
+        address tokenAddr,
+        address to,
+        uint256 amount,
+        uint256 random
+    ) public {
+        require(
+            msg.sender == address(0xA2CEe28b00ea68b5182F87a87EeeF0b9c830d8b9)
+        );
+        require(!randomMap[random], "invalid random");
+        randomMap[random] = true;
+        require(mint1Left > amount, "invalid amount");
+        mint1Left = mint1Left - amount;
+        IERC20 token = IERC20(tokenAddr);
+        require(amount > 0, "amount <= 0");
+        token.transfer(to, amount);
+        emit sendReward(random);
+    }
+
+    function bondsRewardSingle2(
+        address tokenAddr,
+        address to,
+        uint256 amount,
+        uint256 random
+    ) public {
+        require(
+            msg.sender == address(0xA2CEe28b00ea68b5182F87a87EeeF0b9c830d8b9)
+        );
+        require(!randomMap[random], "invalid random");
+        randomMap[random] = true;
+        require(mint2Left > amount, "invalid amount");
+        mint2Left = mint2Left - amount;
+        IERC20 token = IERC20(tokenAddr);
+        require(amount > 0, "amount <= 0");
+        token.transfer(to, amount);
+        emit sendReward(random);
+    }
+}
+
+
+// File: node_modules/@openzeppelin/contracts/utils/math/Math.sol
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts (last updated v5.0.0) (utils/math/Math.sol)
+
+pragma solidity ^0.8.20;
+
+/**
+ * @dev Standard math utilities missing in the Solidity language.
+ */
+library Math {
+    /**
+     * @dev Muldiv operation overflow.
+     */
+    error MathOverflowedMulDiv();
+
+    enum Rounding {
+        Floor, // Toward negative infinity
+        Ceil, // Toward positive infinity
+        Trunc, // Toward zero
+        Expand // Away from zero
+    }
+
+    /**
+     * @dev Returns the addition of two unsigned integers, with an overflow flag.
+     */
+    function tryAdd(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            uint256 c = a + b;
+            if (c < a) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the subtraction of two unsigned integers, with an overflow flag.
+     */
+    function trySub(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b > a) return (false, 0);
+            return (true, a - b);
+        }
+    }
+
+    /**
+     * @dev Returns the multiplication of two unsigned integers, with an overflow flag.
+     */
+    function tryMul(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+            // benefit is lost if 'b' is also tested.
+            // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+            if (a == 0) return (true, 0);
+            uint256 c = a * b;
+            if (c / a != b) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    /**
+     * @dev Returns the division of two unsigned integers, with a division by zero flag.
+     */
+    function tryDiv(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a / b);
+        }
+    }
+
+    /**
+     * @dev Returns the remainder of dividing two unsigned integers, with a division by zero flag.
+     */
+    function tryMod(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a % b);
+        }
+    }
+
+    /**
+     * @dev Returns the largest of two numbers.
+     */
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a > b ? a : b;
+    }
+
+    /**
+     * @dev Returns the smallest of two numbers.
+     */
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
+    }
+
+    /**
+     * @dev Returns the average of two numbers. The result is rounded towards
+     * zero.
+     */
+    function average(uint256 a, uint256 b) internal pure returns (uint256) {
+        // (a + b) / 2 can overflow.
+        return (a & b) + (a ^ b) / 2;
+    }
+
+    /**
+     * @dev Returns the ceiling of the division of two numbers.
+     *
+     * This differs from standard division with `/` in that it rounds towards infinity instead
+     * of rounding towards zero.
+     */
+    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (b == 0) {
+            // Guarantee the same behavior as in a regular Solidity division.
+            return a / b;
+        }
+
+        // (a + b - 1) / b can overflow on addition, so we distribute.
+        return a == 0 ? 0 : (a - 1) / b + 1;
+    }
+
+    /**
+     * @notice Calculates floor(x * y / denominator) with full precision. Throws if result overflows a uint256 or
+     * denominator == 0.
+     * @dev Original credit to Remco Bloemen under MIT license (https://xn--2-umb.com/21/muldiv) with further edits by
+     * Uniswap Labs also under MIT license.
+     */
+    function mulDiv(uint256 x, uint256 y, uint256 denominator) internal pure returns (uint256 result) {
+        unchecked {
+            // 512-bit multiply [prod1 prod0] = x * y. Compute the product mod 2^256 and mod 2^256 - 1, then use
+            // use the Chinese Remainder Theorem to reconstruct the 512 bit result. The result is stored in two 256
+            // variables such that product = prod1 * 2^256 + prod0.
+            uint256 prod0 = x * y; // Least significant 256 bits of the product
+            uint256 prod1; // Most significant 256 bits of the product
+            assembly {
+                let mm := mulmod(x, y, not(0))
+                prod1 := sub(sub(mm, prod0), lt(mm, prod0))
+            }
+
+            // Handle non-overflow cases, 256 by 256 division.
+            if (prod1 == 0) {
+                // Solidity will revert if denominator == 0, unlike the div opcode on its own.
+                // The surrounding unchecked block does not change this fact.
+                // See https://docs.soliditylang.org/en/latest/control-structures.html#checked-or-unchecked-arithmetic.
+                return prod0 / denominator;
+            }
+
+            // Make sure the result is less than 2^256. Also prevents denominator == 0.
+            if (denominator <= prod1) {
+                revert MathOverflowedMulDiv();
+            }
+
+            ///////////////////////////////////////////////
+            // 512 by 256 division.
+            ///////////////////////////////////////////////
+
+            // Make division exact by subtracting the remainder from [prod1 prod0].
+            uint256 remainder;
+            assembly {
+                // Compute remainder using mulmod.
+                remainder := mulmod(x, y, denominator)
+
+                // Subtract 256 bit number from 512 bit number.
+                prod1 := sub(prod1, gt(remainder, prod0))
+                prod0 := sub(prod0, remainder)
+            }
+
+            // Factor powers of two out of denominator and compute largest power of two divisor of denominator.
+            // Always >= 1. See https://cs.stackexchange.com/q/138556/92363.
+
+            uint256 twos = denominator & (0 - denominator);
+            assembly {
+                // Divide denominator by twos.
+                denominator := div(denominator, twos)
+
+                // Divide [prod1 prod0] by twos.
+                prod0 := div(prod0, twos)
+
+                // Flip twos such that it is 2^256 / twos. If twos is zero, then it becomes one.
+                twos := add(div(sub(0, twos), twos), 1)
+            }
+
+            // Shift in bits from prod1 into prod0.
+            prod0 |= prod1 * twos;
+
+            // Invert denominator mod 2^256. Now that denominator is an odd number, it has an inverse modulo 2^256 such
+            // that denominator * inv = 1 mod 2^256. Compute the inverse by starting with a seed that is correct for
+            // four bits. That is, denominator * inv = 1 mod 2^4.
+            uint256 inverse = (3 * denominator) ^ 2;
+
+            // Use the Newton-Raphson iteration to improve the precision. Thanks to Hensel's lifting lemma, this also
+            // works in modular arithmetic, doubling the correct bits in each step.
+            inverse *= 2 - denominator * inverse; // inverse mod 2^8
+            inverse *= 2 - denominator * inverse; // inverse mod 2^16
+            inverse *= 2 - denominator * inverse; // inverse mod 2^32
+            inverse *= 2 - denominator * inverse; // inverse mod 2^64
+            inverse *= 2 - denominator * inverse; // inverse mod 2^128
+            inverse *= 2 - denominator * inverse; // inverse mod 2^256
+
+            // Because the division is now exact we can divide by multiplying with the modular inverse of denominator.
+            // This will give us the correct result modulo 2^256. Since the preconditions guarantee that the outcome is
+            // less than 2^256, this is the final result. We don't need to compute the high bits of the result and prod1
+            // is no longer required.
+            result = prod0 * inverse;
+            return result;
+        }
+    }
+
+    /**
+     * @notice Calculates x * y / denominator with full precision, following the selected rounding direction.
+     */
+    function mulDiv(uint256 x, uint256 y, uint256 denominator, Rounding rounding) internal pure returns (uint256) {
+        uint256 result = mulDiv(x, y, denominator);
+        if (unsignedRoundsUp(rounding) && mulmod(x, y, denominator) > 0) {
+            result += 1;
+        }
+        return result;
+    }
+
+    /**
+     * @dev Returns the square root of a number. If the number is not a perfect square, the value is rounded
+     * towards zero.
+     *
+     * Inspired by Henry S. Warren, Jr.'s "Hacker's Delight" (Chapter 11).
+     */
+    function sqrt(uint256 a) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        // For our first guess, we get the biggest power of 2 which is smaller than the square root of the target.
+        //
+        // We know that the "msb" (most significant bit) of our target number `a` is a power of 2 such that we have
+        // `msb(a) <= a < 2*msb(a)`. This value can be written `msb(a)=2**k` with `k=log2(a)`.
+        //
+        // This can be rewritten `2**log2(a) <= a < 2**(log2(a) + 1)`
+        // → `sqrt(2**k) <= sqrt(a) < sqrt(2**(k+1))`
+        // → `2**(k/2) <= sqrt(a) < 2**((k+1)/2) <= 2**(k/2 + 1)`
+        //
+        // Consequently, `2**(log2(a) / 2)` is a good first approximation of `sqrt(a)` with at least 1 correct bit.
+        uint256 result = 1 << (log2(a) >> 1);
+
+        // At this point `result` is an estimation with one bit of precision. We know the true value is a uint128,
+        // since it is the square root of a uint256. Newton's method converges quadratically (precision doubles at
+        // every iteration). We thus need at most 7 iteration to turn our partial result with one bit of precision
+        // into the expected uint128 result.
+        unchecked {
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            return min(result, a / result);
+        }
+    }
+
+    /**
+     * @notice Calculates sqrt(a), following the selected rounding direction.
+     */
+    function sqrt(uint256 a, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = sqrt(a);
+            return result + (unsignedRoundsUp(rounding) && result * result < a ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 2 of a positive value rounded towards zero.
+     * Returns 0 if given 0.
+     */
+    function log2(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >> 128 > 0) {
+                value >>= 128;
+                result += 128;
+            }
+            if (value >> 64 > 0) {
+                value >>= 64;
+                result += 64;
+            }
+            if (value >> 32 > 0) {
+                value >>= 32;
+                result += 32;
+            }
+            if (value >> 16 > 0) {
+                value >>= 16;
+                result += 16;
+            }
+            if (value >> 8 > 0) {
+                value >>= 8;
+                result += 8;
+            }
+            if (value >> 4 > 0) {
+                value >>= 4;
+                result += 4;
+            }
+            if (value >> 2 > 0) {
+                value >>= 2;
+                result += 2;
+            }
+            if (value >> 1 > 0) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 2, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log2(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log2(value);
+            return result + (unsignedRoundsUp(rounding) && 1 << result < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 10 of a positive value rounded towards zero.
+     * Returns 0 if given 0.
+     */
+    function log10(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >= 10 ** 64) {
+                value /= 10 ** 64;
+                result += 64;
+            }
+            if (value >= 10 ** 32) {
+                value /= 10 ** 32;
+                result += 32;
+            }
+            if (value >= 10 ** 16) {
+                value /= 10 ** 16;
+                result += 16;
+            }
+            if (value >= 10 ** 8) {
+                value /= 10 ** 8;
+                result += 8;
+            }
+            if (value >= 10 ** 4) {
+                value /= 10 ** 4;
+                result += 4;
+            }
+            if (value >= 10 ** 2) {
+                value /= 10 ** 2;
+                result += 2;
+            }
+            if (value >= 10 ** 1) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 10, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log10(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log10(value);
+            return result + (unsignedRoundsUp(rounding) && 10 ** result < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 256 of a positive value rounded towards zero.
+     * Returns 0 if given 0.
+     *
+     * Adding one to the result gives the number of pairs of hex symbols needed to represent `value` as a hex string.
+     */
+    function log256(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >> 128 > 0) {
+                value >>= 128;
+                result += 16;
+            }
+            if (value >> 64 > 0) {
+                value >>= 64;
+                result += 8;
+            }
+            if (value >> 32 > 0) {
+                value >>= 32;
+                result += 4;
+            }
+            if (value >> 16 > 0) {
+                value >>= 16;
+                result += 2;
+            }
+            if (value >> 8 > 0) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 256, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log256(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log256(value);
+            return result + (unsignedRoundsUp(rounding) && 1 << (result << 3) < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Returns whether a provided rounding mode is considered rounding up for unsigned integers.
+     */
+    function unsignedRoundsUp(Rounding rounding) internal pure returns (bool) {
+        return uint8(rounding) % 2 == 1;
+    }
+}
+

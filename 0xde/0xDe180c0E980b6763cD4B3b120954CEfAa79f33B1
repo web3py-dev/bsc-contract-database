@@ -1,0 +1,1353 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.8.0 >=0.8.17 ^0.8.0 ^0.8.13 ^0.8.4;
+
+// lib/openzeppelin-contracts/contracts/utils/math/Math.sol
+
+// OpenZeppelin Contracts (last updated v4.8.0) (utils/math/Math.sol)
+
+/**
+ * @dev Standard math utilities missing in the Solidity language.
+ */
+library Math {
+    enum Rounding {
+        Down, // Toward negative infinity
+        Up, // Toward infinity
+        Zero // Toward zero
+    }
+
+    /**
+     * @dev Returns the largest of two numbers.
+     */
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a > b ? a : b;
+    }
+
+    /**
+     * @dev Returns the smallest of two numbers.
+     */
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
+    }
+
+    /**
+     * @dev Returns the average of two numbers. The result is rounded towards
+     * zero.
+     */
+    function average(uint256 a, uint256 b) internal pure returns (uint256) {
+        // (a + b) / 2 can overflow.
+        return (a & b) + (a ^ b) / 2;
+    }
+
+    /**
+     * @dev Returns the ceiling of the division of two numbers.
+     *
+     * This differs from standard division with `/` in that it rounds up instead
+     * of rounding down.
+     */
+    function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
+        // (a + b - 1) / b can overflow on addition, so we distribute.
+        return a == 0 ? 0 : (a - 1) / b + 1;
+    }
+
+    /**
+     * @notice Calculates floor(x * y / denominator) with full precision. Throws if result overflows a uint256 or denominator == 0
+     * @dev Original credit to Remco Bloemen under MIT license (https://xn--2-umb.com/21/muldiv)
+     * with further edits by Uniswap Labs also under MIT license.
+     */
+    function mulDiv(
+        uint256 x,
+        uint256 y,
+        uint256 denominator
+    ) internal pure returns (uint256 result) {
+        unchecked {
+            // 512-bit multiply [prod1 prod0] = x * y. Compute the product mod 2^256 and mod 2^256 - 1, then use
+            // use the Chinese Remainder Theorem to reconstruct the 512 bit result. The result is stored in two 256
+            // variables such that product = prod1 * 2^256 + prod0.
+            uint256 prod0; // Least significant 256 bits of the product
+            uint256 prod1; // Most significant 256 bits of the product
+            assembly {
+                let mm := mulmod(x, y, not(0))
+                prod0 := mul(x, y)
+                prod1 := sub(sub(mm, prod0), lt(mm, prod0))
+            }
+
+            // Handle non-overflow cases, 256 by 256 division.
+            if (prod1 == 0) {
+                return prod0 / denominator;
+            }
+
+            // Make sure the result is less than 2^256. Also prevents denominator == 0.
+            require(denominator > prod1);
+
+            ///////////////////////////////////////////////
+            // 512 by 256 division.
+            ///////////////////////////////////////////////
+
+            // Make division exact by subtracting the remainder from [prod1 prod0].
+            uint256 remainder;
+            assembly {
+                // Compute remainder using mulmod.
+                remainder := mulmod(x, y, denominator)
+
+                // Subtract 256 bit number from 512 bit number.
+                prod1 := sub(prod1, gt(remainder, prod0))
+                prod0 := sub(prod0, remainder)
+            }
+
+            // Factor powers of two out of denominator and compute largest power of two divisor of denominator. Always >= 1.
+            // See https://cs.stackexchange.com/q/138556/92363.
+
+            // Does not overflow because the denominator cannot be zero at this stage in the function.
+            uint256 twos = denominator & (~denominator + 1);
+            assembly {
+                // Divide denominator by twos.
+                denominator := div(denominator, twos)
+
+                // Divide [prod1 prod0] by twos.
+                prod0 := div(prod0, twos)
+
+                // Flip twos such that it is 2^256 / twos. If twos is zero, then it becomes one.
+                twos := add(div(sub(0, twos), twos), 1)
+            }
+
+            // Shift in bits from prod1 into prod0.
+            prod0 |= prod1 * twos;
+
+            // Invert denominator mod 2^256. Now that denominator is an odd number, it has an inverse modulo 2^256 such
+            // that denominator * inv = 1 mod 2^256. Compute the inverse by starting with a seed that is correct for
+            // four bits. That is, denominator * inv = 1 mod 2^4.
+            uint256 inverse = (3 * denominator) ^ 2;
+
+            // Use the Newton-Raphson iteration to improve the precision. Thanks to Hensel's lifting lemma, this also works
+            // in modular arithmetic, doubling the correct bits in each step.
+            inverse *= 2 - denominator * inverse; // inverse mod 2^8
+            inverse *= 2 - denominator * inverse; // inverse mod 2^16
+            inverse *= 2 - denominator * inverse; // inverse mod 2^32
+            inverse *= 2 - denominator * inverse; // inverse mod 2^64
+            inverse *= 2 - denominator * inverse; // inverse mod 2^128
+            inverse *= 2 - denominator * inverse; // inverse mod 2^256
+
+            // Because the division is now exact we can divide by multiplying with the modular inverse of denominator.
+            // This will give us the correct result modulo 2^256. Since the preconditions guarantee that the outcome is
+            // less than 2^256, this is the final result. We don't need to compute the high bits of the result and prod1
+            // is no longer required.
+            result = prod0 * inverse;
+            return result;
+        }
+    }
+
+    /**
+     * @notice Calculates x * y / denominator with full precision, following the selected rounding direction.
+     */
+    function mulDiv(
+        uint256 x,
+        uint256 y,
+        uint256 denominator,
+        Rounding rounding
+    ) internal pure returns (uint256) {
+        uint256 result = mulDiv(x, y, denominator);
+        if (rounding == Rounding.Up && mulmod(x, y, denominator) > 0) {
+            result += 1;
+        }
+        return result;
+    }
+
+    /**
+     * @dev Returns the square root of a number. If the number is not a perfect square, the value is rounded down.
+     *
+     * Inspired by Henry S. Warren, Jr.'s "Hacker's Delight" (Chapter 11).
+     */
+    function sqrt(uint256 a) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+
+        // For our first guess, we get the biggest power of 2 which is smaller than the square root of the target.
+        //
+        // We know that the "msb" (most significant bit) of our target number `a` is a power of 2 such that we have
+        // `msb(a) <= a < 2*msb(a)`. This value can be written `msb(a)=2**k` with `k=log2(a)`.
+        //
+        // This can be rewritten `2**log2(a) <= a < 2**(log2(a) + 1)`
+        // → `sqrt(2**k) <= sqrt(a) < sqrt(2**(k+1))`
+        // → `2**(k/2) <= sqrt(a) < 2**((k+1)/2) <= 2**(k/2 + 1)`
+        //
+        // Consequently, `2**(log2(a) / 2)` is a good first approximation of `sqrt(a)` with at least 1 correct bit.
+        uint256 result = 1 << (log2(a) >> 1);
+
+        // At this point `result` is an estimation with one bit of precision. We know the true value is a uint128,
+        // since it is the square root of a uint256. Newton's method converges quadratically (precision doubles at
+        // every iteration). We thus need at most 7 iteration to turn our partial result with one bit of precision
+        // into the expected uint128 result.
+        unchecked {
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            result = (result + a / result) >> 1;
+            return min(result, a / result);
+        }
+    }
+
+    /**
+     * @notice Calculates sqrt(a), following the selected rounding direction.
+     */
+    function sqrt(uint256 a, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = sqrt(a);
+            return result + (rounding == Rounding.Up && result * result < a ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 2, rounded down, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log2(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >> 128 > 0) {
+                value >>= 128;
+                result += 128;
+            }
+            if (value >> 64 > 0) {
+                value >>= 64;
+                result += 64;
+            }
+            if (value >> 32 > 0) {
+                value >>= 32;
+                result += 32;
+            }
+            if (value >> 16 > 0) {
+                value >>= 16;
+                result += 16;
+            }
+            if (value >> 8 > 0) {
+                value >>= 8;
+                result += 8;
+            }
+            if (value >> 4 > 0) {
+                value >>= 4;
+                result += 4;
+            }
+            if (value >> 2 > 0) {
+                value >>= 2;
+                result += 2;
+            }
+            if (value >> 1 > 0) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 2, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log2(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log2(value);
+            return result + (rounding == Rounding.Up && 1 << result < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 10, rounded down, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log10(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >= 10**64) {
+                value /= 10**64;
+                result += 64;
+            }
+            if (value >= 10**32) {
+                value /= 10**32;
+                result += 32;
+            }
+            if (value >= 10**16) {
+                value /= 10**16;
+                result += 16;
+            }
+            if (value >= 10**8) {
+                value /= 10**8;
+                result += 8;
+            }
+            if (value >= 10**4) {
+                value /= 10**4;
+                result += 4;
+            }
+            if (value >= 10**2) {
+                value /= 10**2;
+                result += 2;
+            }
+            if (value >= 10**1) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 10, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log10(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log10(value);
+            return result + (rounding == Rounding.Up && 10**result < value ? 1 : 0);
+        }
+    }
+
+    /**
+     * @dev Return the log in base 256, rounded down, of a positive value.
+     * Returns 0 if given 0.
+     *
+     * Adding one to the result gives the number of pairs of hex symbols needed to represent `value` as a hex string.
+     */
+    function log256(uint256 value) internal pure returns (uint256) {
+        uint256 result = 0;
+        unchecked {
+            if (value >> 128 > 0) {
+                value >>= 128;
+                result += 16;
+            }
+            if (value >> 64 > 0) {
+                value >>= 64;
+                result += 8;
+            }
+            if (value >> 32 > 0) {
+                value >>= 32;
+                result += 4;
+            }
+            if (value >> 16 > 0) {
+                value >>= 16;
+                result += 2;
+            }
+            if (value >> 8 > 0) {
+                result += 1;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @dev Return the log in base 10, following the selected rounding direction, of a positive value.
+     * Returns 0 if given 0.
+     */
+    function log256(uint256 value, Rounding rounding) internal pure returns (uint256) {
+        unchecked {
+            uint256 result = log256(value);
+            return result + (rounding == Rounding.Up && 1 << (result * 8) < value ? 1 : 0);
+        }
+    }
+}
+
+// lib/solmate/src/auth/Owned.sol
+
+/// @notice Simple single owner authorization mixin.
+/// @author Solmate (https://github.com/transmissions11/solmate/blob/main/src/auth/Owned.sol)
+abstract contract Owned {
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event OwnershipTransferred(address indexed user, address indexed newOwner);
+
+    /*//////////////////////////////////////////////////////////////
+                            OWNERSHIP STORAGE
+    //////////////////////////////////////////////////////////////*/
+
+    address public owner;
+
+    modifier onlyOwner() virtual {
+        require(msg.sender == owner, "UNAUTHORIZED");
+
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    constructor(address _owner) {
+        owner = _owner;
+
+        emit OwnershipTransferred(address(0), _owner);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             OWNERSHIP LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        owner = newOwner;
+
+        emit OwnershipTransferred(msg.sender, newOwner);
+    }
+}
+
+// src/UniswapV2/interfaces/IERC20.sol
+
+interface IERC20 {
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address owner) external view returns (uint256);
+
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+}
+
+// src/UniswapV2/interfaces/IUniswapV2Factory.sol
+
+interface IUniswapV2Factory {
+    event PairCreated(address indexed token0, address indexed token1, address pair, uint256);
+
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
+
+    function allPairs(uint256) external view returns (address pair);
+
+    function allPairsLength() external view returns (uint256);
+
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+
+    function router() external view returns (address);
+
+    function parameters() external view returns (address token0, address token1);
+}
+
+// src/UniswapV2/interfaces/IUniswapV2Router.sol
+
+interface IUniswapV2Router {
+    function factory() external view returns (address);
+    function addLiquidityETH(
+        address token,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to
+    ) external payable returns (uint256 amountToken, uint256 amountETH, uint256 liquidity);
+
+    function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to)
+        external
+        returns (uint256[] memory amounts);
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function quote(uint256 amountA, uint256 reserveA, uint256 reserveB) external pure returns (uint256 amountB);
+
+    function getAmountsOut(uint256 amountIn, address[] calldata path)
+        external
+        view
+        returns (uint256[] memory amounts);
+
+    function getAmountsIn(uint256 amountOut, address[] calldata path)
+        external
+        view
+        returns (uint256[] memory amounts);
+}
+
+// src/UniswapV2/interfaces/IWETH.sol
+
+interface IWETH {
+    function deposit() external payable;
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function withdraw(uint256) external;
+}
+
+// src/UniswapV2/libraries/TransferHelper.sol
+
+// helper methods for interacting with ERC20 tokens and sending ETH that do not consistently return true/false
+library TransferHelper {
+    function safeTransfer(address token, address to, uint256 value) internal {
+        // bytes4(keccak256(bytes('transfer(address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "trf");
+    }
+
+    function safeTransferFrom(address token, address from, address to, uint256 value) internal {
+        // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x23b872dd, from, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), "Ff");
+    }
+
+    function safeTransferETH(address to, uint256 value) internal {
+        (bool success,) = to.call{value: value}(new bytes(0));
+        require(success, "EF");
+    }
+}
+
+// src/environment/bsc.sol
+
+address constant WBNB__ = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
+address constant ROUTER__ = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
+address constant FACTORY__ = 0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73;
+address constant PinkLock02__ = 0x407993575c91ce7643a4d4cCACc9A98c36eE1BBE;
+address constant Pairbnb_VS_usdt__ = 0x16b9a82891338f9bA80E2D6970FddA79D1eb0daE;
+
+// src/environment/const.sol
+
+address constant foundation = 0x3ef21c8D039051C35f1CC45e9D46d404f194EeD0;
+address constant rootAddr = 0xBb8572555285dd365FC0195d7b78A48e815d3027;
+
+uint40 constant intervla = 5 minutes;
+uint40 constant perid = 100; // 最低1，表示1天
+uint256 constant minBuyValue = 0.5 ether;
+uint256 constant levelAmount = 5 ether;
+
+// uint40 constant intervla = 5 minutes;
+// uint40 constant perid = 1; // 最低1，表示1天
+// uint256 constant minBuyValue = 0.0005 ether;
+// uint256 constant levelAmount = 0.0005 ether;
+
+// src/environment/local.sol
+
+address constant Local_WBNB__ = 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512;
+address constant Local_ROUTER__ = 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9;
+address constant Local_FACTORY__ = 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0;
+address constant Local_PinkLock02__ = address(0xc02);
+address constant Local_Pairbnb_VS_usdt__ = 0xAeA72E8d14C883fB20b88B6ABCe63E885eB0Dd74;
+
+// src/environment/opbnb.sol
+
+// chainid = 204
+
+address constant Opbnb_WBNB__ = 0x4200000000000000000000000000000000000006;
+address constant Opbnb_ROUTER__ = 0x8cFe327CEc66d1C090Dd72bd0FF11d690C33a2Eb;
+address constant Opbnb_FACTORY__ = 0x02a84c1b3BBD7401a5f7fa98a384EBC70bB5749E;
+address constant Opbnb_PinkLock02__ = 0x4200000000000000000000000000000000000006;
+address constant Opbnb_Pairbnb_VS_usdt__ = 0x706f7257e78B6F2404a1afb5c480645A6F5be91d;
+
+// src/interfaces/IGMM.sol
+
+interface IGMM {
+    function distributor() external view returns (address);
+    function presale() external view returns (bool);
+    function isInCoinHolders(address) external view returns (bool);
+    function addCommunityHolder(address shareholder) external;
+}
+
+// src/UniswapV2/interfaces/IUniswapV2Pair.sol
+
+interface IUniswapV2Pair is IERC20 {
+    event Mint(address indexed sender, uint256 amount0, uint256 amount1);
+    event Burn(address indexed sender, uint256 amount0, uint256 amount1, address indexed to);
+    event Swap(
+        address indexed sender,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out,
+        address indexed to
+    );
+    event Sync(uint112 reserve0, uint112 reserve1);
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint256);
+    function factory() external view returns (address);
+
+    function token0() external view returns (address);
+
+    function token1() external view returns (address);
+
+    function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+
+    function price0CumulativeLast() external view returns (uint256);
+
+    function price1CumulativeLast() external view returns (uint256);
+
+    function mint(address to) external returns (uint256 liquidity);
+
+    function burn(address to) external returns (uint256 amount0, uint256 amount1);
+
+    function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external;
+    function sync() external;
+}
+
+// src/lib/ExcludedFromFeeListRouter.sol
+
+
+
+
+
+abstract contract ExcludedFromFeeListRouter is Owned {
+    mapping(address => bool) internal _isExcludedFromFee;
+
+    function isExcludedFromFee(address account) public view returns (bool) {
+        return _isExcludedFromFee[account];
+    }
+
+    function excludeFromFee(address account) public onlyOwner {
+        _isExcludedFromFee[account] = true;
+    }
+}
+
+// src/UniswapV2/libraries/UniswapV2Library.sol
+
+//solhint-disable reason-string
+
+library UniswapV2Library {
+    // returns sorted token addresses, used to handle return values from pairs sorted in this order
+    function sortTokens(address tokenA, address tokenB) internal pure returns (address token0, address token1) {
+        require(tokenA != tokenB, "IS");
+        (token0, token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
+        require(token0 != address(0), "ZS");
+    }
+
+    // calculates the CREATE2 address for a pair without making any external calls
+    function pairFor(address factory, address tokenA, address tokenB) internal view returns (address pair) {
+        pair = IUniswapV2Factory(factory).getPair(tokenA, tokenB);
+    }
+
+    // fetches and sorts the reserves for a pair
+    function getReserves(address factory, address tokenA, address tokenB)
+        internal
+        view
+        returns (uint256 reserveA, uint256 reserveB)
+    {
+        (address token0,) = sortTokens(tokenA, tokenB);
+        (uint256 reserve0, uint256 reserve1,) = IUniswapV2Pair(pairFor(factory, tokenA, tokenB)).getReserves();
+        (reserveA, reserveB) = tokenA == token0 ? (reserve0, reserve1) : (reserve1, reserve0);
+    }
+
+    // given some amount of an asset and pair reserves, returns an equivalent amount of the other asset
+    function quote(uint256 amountA, uint256 reserveA, uint256 reserveB) internal pure returns (uint256 amountB) {
+        require(amountA > 0, "IT");
+        require(reserveA > 0 && reserveB > 0, "TY");
+        amountB = (amountA * reserveB) / reserveA;
+    }
+
+    // given an input amount of an asset and pair reserves, returns the maximum output amount of the other asset
+    function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut)
+        internal
+        pure
+        returns (uint256 amountOut)
+    {
+        require(amountIn > 0, "NT");
+        require(reserveIn > 0 && reserveOut > 0, "DI");
+        uint256 amountInWithFee = amountIn * 997;
+        uint256 numerator = amountInWithFee * reserveOut;
+        uint256 denominator = reserveIn * 1000 + amountInWithFee;
+        amountOut = numerator / denominator;
+    }
+
+    // given an output amount of an asset and pair reserves, returns a required input amount of the other asset
+    function getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut)
+        internal
+        pure
+        returns (uint256 amountIn)
+    {
+        require(amountOut > 0, "_AM");
+        require(reserveIn > 0 && reserveOut > 0, "IE");
+        uint256 numerator = reserveIn * amountOut * 1000;
+        uint256 denominator = (reserveOut - amountOut) * 997;
+        amountIn = numerator / denominator + 1;
+    }
+
+    // performs chained getAmountOut calculations on any number of pairs
+    function getAmountsOut(address factory, uint256 amountIn, address[] memory path)
+        internal
+        view
+        returns (uint256[] memory amounts)
+    {
+        require(path.length >= 2, "TH");
+        amounts = new uint256[](path.length);
+        amounts[0] = amountIn;
+        for (uint256 i; i < path.length - 1; i++) {
+            (uint256 reserveIn, uint256 reserveOut) = getReserves(factory, path[i], path[i + 1]);
+            amounts[i + 1] = getAmountOut(amounts[i], reserveIn, reserveOut);
+        }
+    }
+
+    // performs chained getAmountIn calculations on any number of pairs
+    function getAmountsIn(address factory, uint256 amountOut, address[] memory path)
+        internal
+        view
+        returns (uint256[] memory amounts)
+    {
+        require(path.length >= 2, "AT");
+        amounts = new uint256[](path.length);
+        amounts[amounts.length - 1] = amountOut;
+        for (uint256 i = path.length - 1; i > 0; i--) {
+            (uint256 reserveIn, uint256 reserveOut) = getReserves(factory, path[i - 1], path[i]);
+            amounts[i - 1] = getAmountIn(amounts[i], reserveIn, reserveOut);
+        }
+    }
+}
+
+// src/UniswapV2/UniswapV2Router.sol
+
+abstract contract UniswapV2Router is IUniswapV2Router, ExcludedFromFeeListRouter {
+    //solhint-disable-next-line immutable-vars-naming
+    address public immutable override factory;
+    address immutable WETH;
+    address immutable GMM;
+
+    modifier whiteList() {
+        require(_isExcludedFromFee[msg.sender], "wl");
+        _;
+    }
+
+    constructor(address _factory, address _WETH, address _GMM) {
+        factory = _factory;
+        WETH = _WETH;
+        GMM = _GMM;
+        excludeFromFee(msg.sender);
+        excludeFromFee(address(this));
+    }
+
+    receive() external payable {}
+
+    // **** ADD LIQUIDITY ****
+    function _addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin
+    ) internal virtual returns (uint256 amountA, uint256 amountB) {
+        // create the pair if it doesn't exist yet
+        if (IUniswapV2Factory(factory).getPair(tokenA, tokenB) == address(0)) {
+            IUniswapV2Factory(factory).createPair(tokenA, tokenB);
+        }
+        (uint256 reserveA, uint256 reserveB) = UniswapV2Library.getReserves(factory, tokenA, tokenB);
+        if (reserveA == 0 && reserveB == 0) {
+            (amountA, amountB) = (amountADesired, amountBDesired);
+        } else {
+            uint256 amountBOptimal = UniswapV2Library.quote(amountADesired, reserveA, reserveB);
+            if (amountBOptimal <= amountBDesired) {
+                require(amountBOptimal >= amountBMin, "B_A");
+                (amountA, amountB) = (amountADesired, amountBOptimal);
+            } else {
+                uint256 amountAOptimal = UniswapV2Library.quote(amountBDesired, reserveB, reserveA);
+                assert(amountAOptimal <= amountADesired);
+                require(amountAOptimal >= amountAMin, "A_A");
+                (amountA, amountB) = (amountAOptimal, amountBDesired);
+            }
+        }
+    }
+
+    function addLiquidityETH(
+        address token,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to
+    ) external payable virtual override whiteList returns (uint256 amountToken, uint256 amountETH, uint256 liquidity) {
+        (amountToken, amountETH) =
+            _addLiquidity(token, WETH, amountTokenDesired, msg.value, amountTokenMin, amountETHMin);
+        address pair = UniswapV2Library.pairFor(factory, token, WETH);
+        TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
+        IWETH(WETH).deposit{value: amountETH}();
+        assert(IWETH(WETH).transfer(pair, amountETH));
+        liquidity = IUniswapV2Pair(pair).mint(to);
+        // refund dust eth, if any
+        if (msg.value > amountETH) {
+            TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
+        }
+    }
+
+    // **** REMOVE LIQUIDITY ****
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to
+    ) public virtual override whiteList returns (uint256 amountA, uint256 amountB) {
+        address pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
+        IUniswapV2Pair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
+        (uint256 amount0, uint256 amount1) = IUniswapV2Pair(pair).burn(to);
+        (address token0,) = UniswapV2Library.sortTokens(tokenA, tokenB);
+        (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);
+        require(amountA >= amountAMin, "SF");
+        require(amountB >= amountBMin, "FF");
+    }
+
+    // **** SWAP ****
+    // requires the initial amount to have already been sent to the first pair
+    function _swap(uint256[] memory amounts, address[] memory path, address _to) internal virtual {
+        for (uint256 i; i < path.length - 1; i++) {
+            (address input, address output) = (path[i], path[i + 1]);
+            (address token0,) = UniswapV2Library.sortTokens(input, output);
+            uint256 amountOut = amounts[i + 1];
+            (uint256 amount0Out, uint256 amount1Out) =
+                input == token0 ? (uint256(0), amountOut) : (amountOut, uint256(0));
+            address to = i < path.length - 2 ? UniswapV2Library.pairFor(factory, output, path[i + 2]) : _to;
+            IUniswapV2Pair(UniswapV2Library.pairFor(factory, input, output)).swap(
+                amount0Out, amount1Out, to, new bytes(0)
+            );
+        }
+    }
+
+    function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to)
+        external
+        virtual
+        override
+        whiteList
+        returns (uint256[] memory amounts)
+    {
+        amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
+        require(amounts[amounts.length - 1] >= amountOutMin, "pV");
+        TransferHelper.safeTransferFrom(
+            path[0], msg.sender, UniswapV2Library.pairFor(factory, path[0], path[1]), amounts[0]
+        );
+        _swap(amounts, path, to);
+    }
+
+    // **** LIBRARY FUNCTIONS ****
+    function quote(uint256 amountA, uint256 reserveA, uint256 reserveB)
+        public
+        pure
+        virtual
+        override
+        returns (uint256 amountB)
+    {
+        return UniswapV2Library.quote(amountA, reserveA, reserveB);
+    }
+
+    function getAmountsOut(uint256 amountIn, address[] memory path)
+        public
+        view
+        virtual
+        override
+        returns (uint256[] memory amounts)
+    {
+        return UniswapV2Library.getAmountsOut(factory, amountIn, path);
+    }
+
+    function getAmountsIn(uint256 amountOut, address[] memory path)
+        public
+        view
+        virtual
+        override
+        returns (uint256[] memory amounts)
+    {
+        return UniswapV2Library.getAmountsIn(factory, amountOut, path);
+    }
+
+    function addLiqEth(uint256 wethAmount) internal returns (uint256 liquidity) {
+        uint256 half = wethAmount / 2;
+        address[] memory path = new address[](2);
+        path[0] = WETH;
+        path[1] = GMM;
+        uint256[] memory amounts = UniswapV2Library.getAmountsOut(factory, half, path);
+        address pair = UniswapV2Library.pairFor(factory, WETH, GMM);
+        assert(IWETH(WETH).transfer(pair, amounts[0]));
+        _swap(amounts, path, address(this));
+
+        (uint256 amountA, uint256 amountB) = _addLiquidity(WETH, GMM, half, amounts[1], 0, 0);
+        TransferHelper.safeTransfer(WETH, pair, amountA);
+        TransferHelper.safeTransfer(GMM, pair, amountB);
+        liquidity = IUniswapV2Pair(pair).mint(address(this));
+    }
+}
+
+// src/StakingRewards.sol
+
+contract StakingRewards is UniswapV2Router {
+    event Staked(address indexed user, uint256 amount, uint256 timestamp);
+    event RewardPaid(address indexed user, uint256 reward, uint256 token_reward, uint256 bnb_reward, uint256 timestamp);
+    event Relation(address indexed from, address parent, uint256 timestamp);
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+
+    uint8 constant communityFee = 5;
+    uint8 constant fundFee = 2;
+    uint8 constant lpFee = 3;
+    uint8 constant protectFee = 40;
+
+    uint8 public constant decimals = 18;
+
+    string public constant name = unicode"算力";
+    string public constant symbol = unicode"算力";
+
+    struct Record {
+        uint256 startTime;
+        uint256 expTime;
+        uint256 rcount;
+        uint256 everyPeriodReward;
+    }
+
+    uint256 public totalSupply;
+    mapping(address => uint256) public balances;
+
+    mapping(address user => Record[]) public userStakeRecord;
+    mapping(address user => uint256 totalReward) public rewards;
+    mapping(address user => uint256 rewardPaid) public userRewardAlreadyPaid;
+
+    mapping(address parent => address[] nodes) public nodesOf; //我推荐了谁,多个节点
+    mapping(address user => mapping(address child => bool)) public isXiaJi; //是否是我的下级
+    mapping(address child => address parent) public parentOf; // 我的邀请者是谁
+
+    address immutable PANCAKE_ROUTER;
+    address immutable gmmdistributor;
+
+    function nextRewardTime(uint256 i, address account) external view returns (uint256 t) {
+        Record storage slot = userStakeRecord[account][i];
+        t = slot.startTime + (slot.rcount * intervla) + 5;
+    }
+
+    function updateStakeReward() public {
+        address account = msg.sender;
+        Record[] storage cord = userStakeRecord[account];
+        if (cord.length > 0) {
+            uint256 leiji;
+            for (uint256 i = cord.length - 1; i >= 0; i--) {
+                leiji += updateSolt(i, cord);
+                if (i == 0) break;
+            }
+            rewards[account] += leiji;
+            emit Transfer(address(0), account, leiji);
+
+            rewardToParents(account, leiji);
+
+            rewardToChildren(account, leiji);
+        }
+    }
+
+    constructor(address _factory, address _WETH, address _GMM)
+        Owned(msg.sender)
+        UniswapV2Router(_factory, _WETH, _GMM)
+    {
+        address pankRouter;
+        if (block.chainid == 56) {
+            pankRouter = ROUTER__;
+        } else if (block.chainid == 1337) {
+            pankRouter = Local_ROUTER__;
+        } else if (block.chainid == 204) {
+            pankRouter = Opbnb_ROUTER__;
+        } else {
+            revert();
+        }
+        PANCAKE_ROUTER = pankRouter;
+        gmmdistributor = IGMM(_GMM).distributor();
+    }
+
+    function updateSolt(uint256 index, Record[] storage cord) private returns (uint256 reward) {
+        Record storage slot = cord[index];
+        uint256 lastTimeReward = slot.startTime + (slot.rcount * intervla);
+        uint256 lastTime = block.timestamp;
+
+        bool isEnd;
+        if (lastTime >= slot.expTime) {
+            lastTime = slot.expTime;
+            isEnd = true;
+        }
+
+        if (lastTime >= lastTimeReward) {
+            uint256 toNow = lastTime - lastTimeReward;
+            if (toNow > intervla) {
+                uint256 c = toNow / intervla; //should reward times
+                reward = c * slot.everyPeriodReward;
+                slot.rcount += c;
+            }
+        }
+
+        if (isEnd) {
+            slot = cord[cord.length - 1];
+            cord.pop();
+        }
+    }
+
+    function rewardToParents(address account, uint256 reward) private {
+        address par = parentOf[account];
+        for (uint256 j = 1; j <= 20; j++) {
+            if (par == address(0)) break;
+
+            if (nodesOf[par].length < j) {
+                bool isCommunilty = IGMM(GMM).isInCoinHolders(par);
+                if (!isCommunilty) {
+                    par = parentOf[par];
+                    continue;
+                }
+            }
+            uint256 fee = reward * 3 / 100;
+            uint256 final_rew = rewards[par] + fee;
+            if (balances[par] * 2 >= final_rew) {
+                rewards[par] = final_rew;
+                emit Transfer(address(0), par, fee);
+            }
+
+            par = parentOf[par];
+        }
+    }
+
+    function rewardToChildren(address account, uint256 reward) private {
+        address[] storage myNodes = nodesOf[account];
+        uint256 ll = Math.min(myNodes.length, 20);
+        if (ll > 0) {
+            uint256 everyAmount = reward / ll / 10;
+            for (uint256 k = 0; k < ll; k++) {
+                address nd = myNodes[k];
+                if (nodesOf[nd].length > 0) {
+                    uint256 final_rew = rewards[nd] + everyAmount;
+                    if (balances[nd] * 2 >= final_rew) {
+                        rewards[nd] = final_rew;
+                        emit Transfer(address(0), nd, everyAmount);
+                    }
+                }
+            }
+        }
+    }
+
+    function balanceOf(address account) external view returns (uint256 bal) {
+        uint256 rew = rewards[account];
+        uint256 maxCpa = balances[account] * 2;
+        rew = Math.min(rew, maxCpa);
+        uint256 paid = userRewardAlreadyPaid[account];
+        if (rew > paid) {
+            bal = rew - paid;
+        }
+    }
+
+    function calOneSlot(uint256 index) external {
+        Record[] storage cord = userStakeRecord[msg.sender];
+        uint256 reward = updateSolt(index, cord);
+        rewards[msg.sender] += reward;
+        emit Transfer(address(0), msg.sender, reward);
+
+        rewardToParents(msg.sender, reward);
+
+        rewardToChildren(msg.sender, reward);
+    }
+
+    function add_relation(address _child, address father) private {
+        if (parentOf[_child] != address(0)) return;
+        if (_child == father) return;
+        if (_child == rootAddr) return;
+        address up;
+        if (father == address(0)) {
+            up = rootAddr;
+        } else {
+            up = father;
+            address next_up = parentOf[father];
+            for (uint256 i = 0; i < 20; i++) {
+                if (next_up == address(0)) break;
+                if (next_up == _child) return;
+                next_up = parentOf[next_up];
+            }
+        }
+
+        parentOf[_child] = up;
+        nodesOf[up].push(_child);
+        isXiaJi[up][_child] = true;
+        if (nodesOf[up].length >= 20) {
+            IGMM(GMM).addCommunityHolder(up); //直推20个升级社区
+        }
+        emit Relation(_child, up, block.timestamp);
+    }
+
+    function addRelationWithCondiction(address _child, address _parent) private {
+        if (_parent == address(0)) {
+            add_relation(_child, _parent);
+        } else {
+            if (balances[_parent] > 0) {
+                add_relation(_child, _parent);
+            }
+        }
+    }
+
+    function buy(address _parent, uint256 protectMin) external payable {
+        require(msg.value >= minBuyValue, "by");
+
+        addRelationWithCondiction(msg.sender, _parent);
+
+        //25%入金＋25%lp
+        uint256 swapAmount = msg.value / 2;
+        IWETH(WETH).deposit{value: swapAmount}();
+        addLiqEth(swapAmount);
+
+        uint256 to_community = msg.value * communityFee / 100;
+        uint256 to_lp = msg.value * lpFee / 100;
+        uint256 to_fund = msg.value * fundFee / 100;
+        uint256 to_protectFee = msg.value * protectFee / 100;
+
+        //5%社区帕点
+        address communityAddr = getParentInCommunity(msg.sender);
+        payable(address(communityAddr)).transfer(to_community);
+
+        // 2%基金会
+        payable(foundation).transfer(to_fund);
+
+        // 3%外盘lp分红＋社区分红
+        uint256 half = to_lp / 2;
+        payable(address(GMM)).transfer(half);
+        payable(gmmdistributor).transfer(half);
+
+        // 40%直接拉盘二级其中15%销毁，25%回流矿池。
+        uint256 gmm_bal_before = IERC20(GMM).balanceOf(address(this));
+        buyTo2Lv(to_protectFee, protectMin);
+        uint256 gmm_bal_after = IERC20(GMM).balanceOf(address(this));
+
+        IERC20(GMM).transfer(address(0xdead), (gmm_bal_after - gmm_bal_before) * 3 / 8);
+
+        stake(msg.value, msg.sender);
+    }
+
+    //获取某个账户最近距离的社区上级
+    function getParentInCommunity(address _account) private view returns (address _parent) {
+        _parent = rootAddr;
+        address father = parentOf[_account];
+        for (uint256 i = 0; i < 20; i++) {
+            if (father == address(0)) break;
+            bool isCommunilty = IGMM(GMM).isInCoinHolders(father);
+            if (isCommunilty) {
+                return father;
+            }
+            father = parentOf[father];
+        }
+    }
+
+    function buyTo2Lv(uint256 to_protectFee, uint256 protectMin) private {
+        address[] memory path = new address[](2);
+        path[0] = address(WETH);
+        path[1] = address(GMM);
+
+        IPancakeRouter(PANCAKE_ROUTER).swapExactETHForTokensSupportingFeeOnTransferTokens{value: to_protectFee}(
+            protectMin, path, address(this), block.timestamp
+        );
+    }
+
+    function reduceReward() private returns (uint256 reward) {
+        uint256 t_reward = rewards[msg.sender];
+        uint256 maxCpa = balances[msg.sender] * 2;
+        t_reward = Math.min(t_reward, maxCpa);
+        uint256 already_paid = userRewardAlreadyPaid[msg.sender];
+        require(t_reward > already_paid, ">000");
+        reward = t_reward - already_paid;
+        userRewardAlreadyPaid[msg.sender] += reward;
+        emit Transfer(msg.sender, address(0), reward);
+    }
+
+    function rewardWithLP(uint256 reward) private {
+        address pair = UniswapV2Library.pairFor(factory, WETH, GMM);
+        uint256 lp_total = IERC20(pair).totalSupply();
+        (uint112 eth_bal,,) = IUniswapV2Pair(pair).getReserves();
+
+        uint256 liquidity = reward * lp_total / eth_bal / 2;
+
+        uint256 lp_bal = IERC20(pair).balanceOf(address(this));
+        require(lp_bal >= liquidity, "lp>");
+
+        IERC20(pair).transfer(pair, liquidity);
+        (uint256 amountETH, uint256 amountToken) = IUniswapV2Pair(pair).burn(address(this));
+
+        IERC20(GMM).transfer(msg.sender, amountToken);
+        IWETH(WETH).withdraw(amountETH);
+        payable(address(msg.sender)).transfer(amountETH);
+        IUniswapV2Pair(pair).sync();
+        emit RewardPaid(msg.sender, reward, amountToken, amountETH, block.timestamp);
+    }
+
+    function rewardWithToken(uint256 reward) private returns (uint256) {
+        address pair = UniswapV2Library.pairFor(factory, WETH, GMM);
+        (uint112 bnb_pair, uint112 gmm_pair,) = IUniswapV2Pair(pair).getReserves();
+        uint256 gmm_out = reward * gmm_pair / bnb_pair;
+
+        uint256 gmm_bal = IERC20(GMM).balanceOf(address(this));
+        require(gmm_bal >= gmm_out, "gmm>");
+
+        IERC20(GMM).transfer(msg.sender, gmm_out);
+        emit RewardPaid(msg.sender, reward, gmm_out, 0, block.timestamp);
+        return gmm_out;
+    }
+
+    function getLPRewardWithoutUpdate() external returns (uint256) {
+        uint256 reward = reduceReward();
+        rewardWithLP(reward);
+        return reward;
+    }
+
+    function getTokenWithoutUpdate() external returns (uint256) {
+        uint256 reward = reduceReward();
+        uint256 gmm_out = rewardWithToken(reward);
+        return gmm_out;
+    }
+
+    function getLPReward() external returns (uint256) {
+        updateStakeReward();
+
+        uint256 reward = reduceReward();
+
+        rewardWithLP(reward);
+        return reward;
+    }
+
+    function getTokenReward() external returns (uint256) {
+        updateStakeReward();
+
+        uint256 reward = reduceReward();
+
+        uint256 gmm_out = rewardWithToken(reward);
+        return gmm_out;
+    }
+
+    function earned(address account) public view returns (uint256) {
+        Record[] storage cord = userStakeRecord[account];
+        if (cord.length == 0) return 0;
+        uint256 allReward;
+        for (uint256 i = cord.length - 1; i >= 0; i--) {
+            uint256 expTime = cord[i].expTime;
+            uint256 lastTime = Math.min(block.timestamp, expTime);
+
+            uint256 lastTimeReward = cord[i].startTime + (cord[i].rcount * intervla);
+
+            if (lastTime >= lastTimeReward) {
+                uint256 toNow = lastTime - lastTimeReward;
+                if (toNow > intervla) {
+                    uint256 c = toNow / intervla; //should reward times
+                    allReward += c * cord[i].everyPeriodReward;
+                }
+            }
+
+            if (i == 0) break;
+        }
+        uint256 t2_reward = rewards[account] + allReward;
+        uint256 paid = userRewardAlreadyPaid[account];
+        uint256 maxCpa = balances[account] * 2;
+        t2_reward = Math.min(t2_reward, maxCpa);
+        if (paid > t2_reward) return 0;
+        return t2_reward - paid;
+    }
+
+    function sync() external whiteList {
+        uint256 bal = address(this).balance;
+        if (bal > 1 gwei) {
+            IWETH(WETH).deposit{value: bal}();
+        }
+        uint256 w_bal = IERC20(WETH).balanceOf(address(this));
+        address pair = UniswapV2Library.pairFor(factory, WETH, GMM);
+        if (w_bal > 0.001 ether) {
+            IERC20(WETH).transfer(pair, w_bal);
+            IUniswapV2Pair(pair).sync();
+        }
+    }
+
+    function emergencyWithdraw(address to, uint256 balance) external onlyOwner {
+        uint256 _balance = payable(address(this)).balance;
+        require(_balance >= balance, "Droped out");
+        payable(address(to)).transfer(balance);
+    }
+
+    function emergencyWithdrawToken(IERC20 token, address to, uint256 _amount) external onlyOwner {
+        token.transfer(to, _amount);
+    }
+
+    function stake(uint256 _amount, address account) private {
+        Record memory order;
+        order.startTime = block.timestamp;
+        order.expTime = block.timestamp + (perid * 2 * 1 days);
+        order.everyPeriodReward = _amount / perid / 24 / 12;
+
+        totalSupply += _amount;
+        balances[account] += _amount;
+        Record[] storage cord = userStakeRecord[account];
+        cord.push(order);
+
+        emit Staked(account, _amount, block.timestamp);
+    }
+
+    struct Users {
+        address account;
+        address _parent;
+    }
+
+    function setSuanLi(address[] calldata users, uint256 _amount) external onlyOwner {
+        totalSupply += _amount * users.length;
+        Record memory order;
+        order.startTime = block.timestamp;
+        order.expTime = block.timestamp + (perid * 2 * 1 days);
+        order.everyPeriodReward = _amount / perid / 24 / 12;
+
+        for (uint256 i = 0; i < users.length; i++) {
+            address acc = users[i];
+            balances[acc] += _amount;
+            Record[] storage cord = userStakeRecord[acc];
+            cord.push(order);
+            emit Staked(acc, _amount, block.timestamp);
+        }
+    }
+
+    function level_up(address _parent, uint256 protectMin) external payable {
+        require(msg.value >= levelAmount, "<5");
+        bool isty = IGMM(GMM).isInCoinHolders(msg.sender);
+        require(isty == false, "iy");
+
+        addRelationWithCondiction(msg.sender, _parent);
+
+        IGMM(GMM).addCommunityHolder(msg.sender);
+
+        buyTo2Lv(msg.value, protectMin);
+
+        stake(msg.value / 2, msg.sender);
+    }
+
+    function addOneRelation(address _child, address father) external onlyOwner {
+        add_relation(_child, father);
+    }
+
+    function nodeLength(address account) external view returns (uint256) {
+        return nodesOf[account].length;
+    }
+
+    function stakeLength(address account) external view returns (uint256) {
+        return userStakeRecord[account].length;
+    }
+
+    bool public init_finsh;
+
+    modifier initmap() {
+        require(!init_finsh, "it");
+        _;
+    }
+
+    function set_init_finsh() external onlyOwner {
+        init_finsh = true;
+    }
+
+    function init_add_relation(Users[] calldata users) external onlyOwner initmap {
+        for (uint256 i = 0; i < users.length; i++) {
+            address up = users[i]._parent;
+            address _child = users[i].account;
+            parentOf[_child] = up;
+            nodesOf[up].push(_child);
+            isXiaJi[up][_child] = true;
+        }
+    }
+}
+
+interface IPancakeRouter {
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable;
+}

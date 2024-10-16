@@ -1,0 +1,12 @@
+
+// File: src/QorpoMintVirtualAsset.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract QorpoMintVirtualAsset {
+    event Minted(address indexed account, string virtualAssetUUID);
+
+    function mintVirtualAsset(string memory _virtualAssetUUID) public {
+        emit Minted(msg.sender, _virtualAssetUUID);
+    }
+}

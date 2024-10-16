@@ -1,0 +1,71 @@
+/**
+ *Submitted for verification at BscScan.com on 2024-07-23
+*/
+
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.8.2 <0.9.0;
+
+interface IBEP20 {
+    function transfer(address recipient, uint256 amount) external returns (bool);
+}
+
+interface IConstantCenter {
+    function getWithdrawOperator() external view returns (address);
+}
+
+contract ExtractCenter {
+
+    IConstantCenter _constantCenter;
+
+    address private _owner;
+
+    uint256 private constant MAX = ~uint256(0);
+
+    event Extract(address indexed receiver, address indexed token, uint256 orderId, uint256 amount);
+
+    constructor(address constantCenter) {
+        _owner = msg.sender;
+        _constantCenter = IConstantCenter(constantCenter);
+    }
+
+    mapping (uint256 => bool) private _orderExtractedMap;
+
+    mapping (uint256 => bool) private _orderOperatingMap;
+
+    modifier noneExecute(uint256 orderId) {
+        require(!_orderExtractedMap[orderId], "orderId has withdraw");
+        _;
+    }
+
+    modifier nonReentrant(uint256 orderId) {
+        require(!_orderOperatingMap[orderId], "orderId is operating");
+        _orderOperatingMap[orderId] = true;
+        _;
+        _orderOperatingMap[orderId] = false;
+    }
+
+    modifier onlyOperator() {
+        require(msg.sender == _constantCenter.getWithdrawOperator(), "only operator can do");
+        _;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == _owner, "only owner can do");
+        _;
+    }
+
+    function transferOwnerShip(address owner) onlyOwner external {
+        _owner = owner;
+    }
+
+    function extract(address receiver, address token, uint256 amount, uint256 orderId) onlyOperator noneExecute(orderId) nonReentrant(orderId) external {
+        IBEP20(token).transfer(receiver, amount);
+        emit Extract(receiver, token, orderId, amount);
+        _orderExtractedMap[orderId] = true;
+    }
+
+    function claimToken(address token, address recipient, uint256 amount) onlyOwner external {
+        IBEP20(token).transfer(recipient, amount);
+    }
+
+}

@@ -1,0 +1,686 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.18;
+
+library SafeMath {
+
+    function tryAdd(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            uint256 c = a + b;
+            if (c < a) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    function trySub(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b > a) return (false, 0);
+            return (true, a - b);
+        }
+    }
+
+    function tryMul(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            // Gas optimization: this is cheaper than requiring 'a' not being zero, but the
+            // benefit is lost if 'b' is also tested.
+            // See: https://github.com/OpenZeppelin/openzeppelin-contracts/pull/522
+            if (a == 0) return (true, 0);
+            uint256 c = a * b;
+            if (c / a != b) return (false, 0);
+            return (true, c);
+        }
+    }
+
+    function tryDiv(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a / b);
+        }
+    }
+
+    function tryMod(uint256 a, uint256 b) internal pure returns (bool, uint256) {
+        unchecked {
+            if (b == 0) return (false, 0);
+            return (true, a % b);
+        }
+    }
+
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a + b;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a - b;
+    }
+
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a * b;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a / b;
+    }
+
+    function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a % b;
+    }
+
+    function sub(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b <= a, errorMessage);
+            return a - b;
+        }
+    }
+
+    function div(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a / b;
+        }
+    }
+
+    function mod(
+        uint256 a,
+        uint256 b,
+        string memory errorMessage
+    ) internal pure returns (uint256) {
+        unchecked {
+            require(b > 0, errorMessage);
+            return a % b;
+        }
+    }
+}
+
+
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+}
+
+
+abstract contract Ownable is Context {
+    address public _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    constructor() {
+        _transferOwnership(_msgSender());
+    }
+
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    function _checkOwner() internal view virtual {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+interface IERC20 {
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Adipt(address indexed from, uint256 value);
+	event Receave(address indexed from, uint256 value);
+	event Receiveeveryday(address indexed from, uint256 value);
+	event Receivedt(address indexed from, uint256 value);
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address to, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool);
+}
+
+
+interface IERC20Metadata is IERC20 {
+    function name() external view returns (string memory);
+    function symbol() external view returns (string memory);
+    function decimals() external view returns (uint8);
+}
+
+
+contract ERC20 is Context, IERC20, IERC20Metadata {
+    mapping(address => uint256) private _balances;
+
+    mapping(address => mapping(address => uint256)) private _allowances;
+
+    uint256 private _totalSupply;
+
+    string private _name;
+    string private _symbol;
+
+    constructor(string memory name_, string memory symbol_) {
+        _name = name_;
+        _symbol = symbol_;
+    }
+
+    function name() public view virtual override returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual override returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view virtual override returns (uint8) {
+        return 18;
+    }
+
+    function totalSupply() public view virtual override returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view virtual override returns (uint256) {
+        return _balances[account];
+    }
+
+    function transfer(address to, uint256 amount) public virtual override returns (bool) {
+        address owner = _msgSender();
+        _transfer(owner, to, amount);
+        return true;
+    }
+
+    function allowance(address owner, address spender) public view virtual override returns (uint256) {
+        return _allowances[owner][spender];
+    }
+
+    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+        address owner = _msgSender();
+        _approve(owner, spender, amount);
+        return true;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public virtual override returns (bool) {
+        address spender = _msgSender();
+        _spendAllowance(from, spender, amount);
+        _transfer(from, to, amount);
+        return true;
+    }
+
+    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+        address owner = _msgSender();
+        _approve(owner, spender, allowance(owner, spender) + addedValue);
+        return true;
+    }
+
+    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+        address owner = _msgSender();
+        uint256 currentAllowance = allowance(owner, spender);
+        require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
+        unchecked {
+            _approve(owner, spender, currentAllowance - subtractedValue);
+        }
+
+        return true;
+    }
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual {
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
+
+        _beforeTokenTransfer(from, to, amount);
+
+        uint256 fromBalance = _balances[from];
+        require(fromBalance >= amount, "ERC20: transfer amount exceeds balance");
+        unchecked {
+            _balances[from] = fromBalance - amount;
+        }
+        _balances[to] += amount;
+
+        emit Transfer(from, to, amount);
+
+        _afterTokenTransfer(from, to, amount);
+    }
+	
+	function _mint(address account, uint256 amount) internal virtual {
+        require(account != address(0), "ERC20: mint to the zero address");
+
+        _beforeTokenTransfer(address(0), account, amount);
+
+        _totalSupply += amount;
+        _balances[account] += amount;
+        emit Transfer(address(0), account, amount);
+
+        _afterTokenTransfer(address(0), account, amount);
+    }
+
+    function _burn(address account, uint256 amount) internal virtual {
+        require(account != address(0), "ERC20: burn from the zero address");
+
+        _beforeTokenTransfer(account, address(0), amount);
+
+        uint256 accountBalance = _balances[account];
+        require(accountBalance >= amount, "ERC20: burn amount exceeds balance");
+        unchecked {
+            _balances[account] = accountBalance - amount;
+        }
+        _totalSupply -= amount;
+
+        emit Transfer(account, address(0), amount);
+
+        _afterTokenTransfer(account, address(0), amount);
+    }
+
+    function _approve(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
+    }
+
+    function _spendAllowance(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        uint256 currentAllowance = allowance(owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(currentAllowance >= amount, "ERC20: insufficient allowance");
+            unchecked {
+                _approve(owner, spender, currentAllowance - amount);
+            }
+        }
+    }
+
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual {}
+
+    function _afterTokenTransfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal virtual {}
+}
+
+contract MTF is ERC20, Ownable {
+    using SafeMath for uint256;
+    address public deadWallet = 0x000000000000000000000000000000000000dEaD;
+	address public FAddress = 0x2eD9a5C8C13b93955103B9a7C167B67Ef4d568a3;
+    address public CAddress1 = 0x000000000000000000000000000000000000dEaD;
+	address public CAddress2 = 0xE9BD06195E6aB26C5f6EF80e36591661081b3e1c;
+	address public CAddress3 = 0x189b01E652f4680bEccBD67b71B3d222FB74d057;
+	address public CAddress4 = 0x59ED00414cd6762035660901FF79BACb6F7557B7;
+	address public CAddress5 = 0xA2a321C9b4A2DE56C6c973f83f635A89911d38a7;
+	address public getmAddress = 0x3D0B5afEbb47991Ef6B6A9aB8A41d1263f7e52E1;
+	address public uniswapV2Pair;
+    uint256 public Fee = 2;
+	uint256 public Fee2 = 2;
+	uint256 public burnFee = 1;
+	uint256 public Daytt = 86400;
+	uint256 public Minsa = 5000;
+	uint256 public Mstep = 1000;
+	uint256 public Mback = 155 * 10 ** 18;
+	uint256 public Z1 = 15 * 10 ** 18;
+	uint256 public Z2 = 10 * 10 ** 18;
+	uint256 public Munloc = 10;
+	uint256 public lastUserId=88801;
+	uint256 public usernum=0;
+	
+	struct UserInfo {
+	    uint256 id;
+		uint256 Ams;
+        uint256 Amd;
+        uint256 Amt;
+        uint256 Amax;
+		uint256 Amdt;
+        uint256 aditime;
+		uint256 yyxx;
+        uint256 rTimes;
+        uint256 inviteNumber;
+		uint256 inviteNumber2;
+    }
+    struct Inviter{
+        address account;
+        uint256 inviteBlockNumber;
+        uint256 inviteTimestamp;
+    }
+	struct Invest{
+        uint256 num;
+		uint256 num2;
+        uint256 investTimestamp;
+		uint256 reTime;
+		uint256 price;
+		bool retrieve ;
+    }
+	
+	mapping(uint => address) public idToAddress;
+	mapping(address => uint) public AddressToid;
+	mapping(address => address ) inviter;
+    mapping(address => UserInfo) user;
+    mapping(address => Inviter[]) memberInviter;
+	mapping(address => Invest[]) memberInvest;
+
+    constructor(address tokenOwner) ERC20("MTF", "MTF") {
+        uint256 totalSupply = 100000000 * (10**18);
+        _owner = tokenOwner;
+		UserInfo storage user_ = user[tokenOwner];
+		user_.id=88801;
+		idToAddress[88801] = tokenOwner;
+		AddressToid[tokenOwner] = 88801;
+		inviter[tokenOwner] = tokenOwner;
+        _mint(tokenOwner, totalSupply);
+    }
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 amount
+    ) internal override {
+        require(from != address(0), "ERC20: transfer from the zero address");
+        require(to != address(0), "ERC20: transfer to the zero address");
+        if(amount == 0) { super._transfer(from, to, 0); return;}
+		
+		UserInfo storage fuser_ = user[from];
+		uint256 camount = amount+fuser_.Amd;
+		require(balanceOf(from)>= camount,"Transfer amount limit");
+
+		uint256 ramount=amount;
+		if (from == uniswapV2Pair || to == uniswapV2Pair) 
+        {
+		_takeFee(from,amount);
+		_takeFee2(from,amount);
+		_takeburn(from,amount);
+		ramount=amount.mul(100-Fee-Fee2-burnFee).div(100);
+		}
+		super._transfer(from, to, ramount);
+    }
+	
+	function addMemberInviter(address _raddress,uint256 _inviterid) public {
+        require(!isContract(msg.sender), 'Address: call from contract');
+		require(msg.sender==getmAddress,"Address: call from error address");
+		address _inviter = idToAddress[_inviterid];
+        address parent = inviter[_raddress];
+        if(parent == address(0) && _inviter != _raddress){
+		    lastUserId=lastUserId+1;
+            
+			inviter[_raddress] = _inviter;
+			
+            UserInfo storage user1 = user[_inviter];
+            require(user1.id>0, 'inviter is not exist');
+            
+			user1.inviteNumber = user1.inviteNumber.add(1);
+			
+			UserInfo storage user2 = user[_raddress];
+			user2.rTimes = block.timestamp;
+			user2.id = lastUserId;
+			idToAddress[lastUserId] = _raddress;
+			AddressToid[_raddress] = lastUserId;
+			
+            Inviter memory invit = Inviter(_raddress,block.number,block.timestamp);
+            addMemberInviter(_inviter,invit);
+            
+        }
+    }
+
+    function addMemberInviter(address _inviter, Inviter memory invit) private {
+    if (memberInviter[_inviter].length > 0 && memberInviter[_inviter].length < 100) {
+        memberInviter[_inviter].push(invit);
+    } else {
+        if (memberInviter[_inviter].length >= 100) {
+            delete memberInviter[_inviter][0];
+            for (uint256 i = 0; i < memberInviter[_inviter].length - 1; i++) {
+                memberInviter[_inviter][i] = memberInviter[_inviter][i + 1];
+            }
+            memberInviter[_inviter].pop();
+        }
+         memberInviter[_inviter].push(invit);
+    }
+    }
+	
+	function Tsyhd100(address _raddress) public {
+        require(!isContract(msg.sender), 'Address: call from contract');
+		require(msg.sender==getmAddress,"Address: call from error address");
+		
+		
+		UserInfo storage fuser_ = user[_raddress];
+		address cur1=inviter[_raddress];
+		UserInfo storage cuser1 = user[cur1];
+		
+		if(fuser_.yyxx == 0)
+		{
+		    fuser_.yyxx = 1;usernum=usernum+1;
+			uint256 getAmount2=2000 * 10 ** 18;
+			if(fuser_.id>=(88801+Mstep) && fuser_.id<(88801+Mstep*2)){getAmount2=2100 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*2) && fuser_.id<(88801+Mstep*3)){getAmount2=2200 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*3) && fuser_.id<(88801+Mstep*4)){getAmount2=2300 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*4) && fuser_.id<(88801+Mstep*5)){getAmount2=2400 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*5) && fuser_.id<(88801+Mstep*6)){getAmount2=2500 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*6) && fuser_.id<(88801+Mstep*7)){getAmount2=2600 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*7) && fuser_.id<(88801+Mstep*8)){getAmount2=2700 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*8) && fuser_.id<(88801+Mstep*9)){getAmount2=2800 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*9) && fuser_.id<(88801+Mstep*10)){getAmount2=2900 * 10 ** 18;}
+			if(fuser_.id>=(88801+Mstep*10)){getAmount2=3000 * 10 ** 18;}
+			super._transfer(address(this), _raddress, getAmount2);
+			fuser_.Ams = fuser_.Ams+getAmount2;
+			fuser_.Amd = fuser_.Amd+getAmount2;
+			cuser1.inviteNumber2 = cuser1.inviteNumber2.add(1);
+		}
+		
+		fuser_.Amdt = fuser_.Amdt+200 * 10 ** 18;
+		fuser_.Amax = fuser_.Amax+100 * 10 ** 18;
+		
+		uint256 sAmount1=Z1;
+		if(cuser1.Amdt<sAmount1)
+		{
+		    sAmount1=cuser1.Amdt;
+		}
+		if(sAmount1>0)
+		{
+		    cuser1.Amdt = cuser1.Amdt-sAmount1;
+		    IERC20(FAddress).transfer(cur1,sAmount1);
+		}
+		
+		address cur2=inviter[cur1];
+		if(cur2 != address(0))
+		{
+		UserInfo storage cuser2 = user[cur2];
+		uint256 sAmount2=Z2;
+		if(cuser2.Amdt<sAmount2)
+		{
+		    sAmount2=cuser2.Amdt;
+		}
+		if(sAmount2>0)
+		{
+		    cuser2.Amdt = cuser2.Amdt-sAmount2;
+		    IERC20(FAddress).transfer(cur2,sAmount2);
+		}
+		}
+		
+		uint256 sAmount3=10 * 10 ** 18;
+		IERC20(FAddress).transfer(CAddress3,sAmount3);
+		uint256 sAmount4=10 * 10 ** 18;
+		IERC20(FAddress).transfer(CAddress4,sAmount4);
+		
+		uint256 sAmount15=1 * 10 ** 18;
+		address cur = _raddress;
+		for (uint8 i = 0; i < 15; i++) {
+            cur = inviter[cur];
+            if (cur == address(0)) {
+				break;
+            }
+			UserInfo storage cuser15 = user[cur];
+			uint8 gn=0;
+			if(cuser15.inviteNumber2==1){gn=5;}
+			if(cuser15.inviteNumber2==2){gn=10;}
+			if(cuser15.inviteNumber2>=3){gn=15;}
+			uint256 sAmount15r=sAmount15;
+			if(cuser15.Amdt<sAmount15r)
+			{
+				sAmount15r=cuser15.Amdt;
+			}
+			if(sAmount15r>0&&gn>=(i+1))
+			{
+				cuser15.Amdt = cuser15.Amdt-sAmount15r;
+				IERC20(FAddress).transfer(cur,sAmount15r);
+			}
+        }
+		
+    }
+
+	function Tsyhd150(address _raddress,uint256 btime) public {
+        require(!isContract(msg.sender), 'Address: call from contract');
+		require(msg.sender==getmAddress,"Address: call from error address");
+
+		UserInfo storage fuser_ = user[_raddress];
+		fuser_.aditime = btime;
+		fuser_.Amt = fuser_.Amt+150 * 10 ** 18;
+		if(usernum>Minsa&&fuser_.Amd>0)
+		{
+		uint256 unNumber=fuser_.Ams.mul(Munloc).div(1000);
+		fuser_.Amd=fuser_.Amd.sub(unNumber);
+		}
+    }
+	
+	function Tsyhd3(address _raddress) public {
+        require(!isContract(msg.sender), 'Address: call from contract');
+		require(msg.sender==getmAddress,"Address: call from error address");
+		UserInfo storage user_ = user[_raddress];
+		require(user_.aditime>0,"Time is error");
+		require(user_.aditime<(block.timestamp-Daytt),"Must be 24 hours apart");
+		IERC20(FAddress).transfer(_raddress,Mback);
+		uint256 sAmount5=3 * 10 ** 18;
+		IERC20(FAddress).transfer(CAddress5,sAmount5);
+		user_.aditime = 0;
+    }
+
+    //#                              Setter                                     #
+	function setFAddress(address Address_) public onlyOwner {
+        FAddress = Address_;
+    }
+	function setCAddress1(address Address_) public onlyOwner {
+        CAddress1 = Address_;
+    }
+	function setCAddress2(address Address_) public onlyOwner {
+        CAddress2 = Address_;
+    }
+	function setCAddress3(address Address_) public onlyOwner {
+        CAddress3 = Address_;
+    }
+	function setCAddress4(address Address_) public onlyOwner {
+        CAddress4 = Address_;
+    }
+	function setCAddress5(address Address_) public onlyOwner {
+        CAddress5 = Address_;
+    }
+	function setgetmAddress(address Address_) public onlyOwner {
+        getmAddress = Address_;
+    }
+	function changeRouter(address router) public onlyOwner {
+        uniswapV2Pair = router;
+    }
+	function setZ1(uint256 amount) public onlyOwner {
+	    require(amount>0, "ERC20: number error");
+        Z1 = amount;
+    }
+	function setZ2(uint256 amount) public onlyOwner {
+	    require(amount>0, "ERC20: number error");
+        Z2 = amount;
+    }
+	function setMinsa(uint256 a) public onlyOwner {
+	    require(a>0, "ERC20: number error");
+        Minsa = a;
+    }
+	function setMstep(uint256 a) public onlyOwner {
+	    require(a>0, "ERC20: number error");
+        Mstep = a;
+    }
+	function setMback(uint256 a) public onlyOwner {
+	    require(a>0, "ERC20: number error");
+        Mback = a;
+    }
+	function setMunloc(uint256 a) public onlyOwner {
+	    require(a>0, "ERC20: number error");
+        Munloc = a;
+    }
+	function setDaytt(uint256 a) public onlyOwner {
+	    require(a>0, "ERC20: number error");
+        Daytt = a;
+    }
+	
+	function isContract(address addr) internal view returns (bool) {
+        uint size;
+        assembly {size := extcodesize(addr)}
+        return size > 0;
+    }
+	
+	function _takeFee(address sender,uint256 tFee) private {
+        uint256 Number=tFee.mul(Fee).div(100);
+		super._transfer(sender, CAddress1, Number);
+    }
+	function _takeFee2(address sender,uint256 tFee) private {
+        uint256 Number=tFee.mul(Fee2).div(100);
+		super._transfer(sender, CAddress2, Number);
+    }
+	function _takeburn(address sender,uint256 tFee) private {
+        uint256 Number=tFee.mul(burnFee).div(100);
+		super._transfer(sender, deadWallet, Number);
+    }
+	
+	function getUserInvests(address a) public view returns (Invest[] memory invit){
+        return memberInvest[a];
+    }
+	
+	function getInviter(address a) public view returns (address){
+        return inviter[a];
+    }
+	
+	function getUserInviters(address a) public view returns (Inviter[] memory invit){
+        return memberInviter[a];
+    }
+
+    function getUser(address a) public view returns(UserInfo memory member){
+        return (user[a]);
+    }
+}

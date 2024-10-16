@@ -1,0 +1,117 @@
+// SPDX-License-Identifier: MIT
+pragma solidity >=0.6.12 <0.8.23;
+
+interface BEP20 {
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address tokenOwner)
+        external
+        view
+        returns (uint256 balance);
+
+    function allowance(address tokenOwner, address spender)
+        external
+        view
+        returns (uint256 remaining);
+
+    function transfer(address to, uint256 tokens)
+        external
+        returns (bool success);
+
+    function approve(address spender, uint256 tokens)
+        external
+        returns (bool success);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 tokens
+    ) external returns (bool success);
+
+    event Transfer(address indexed from, address indexed to, uint256 tokens);
+    event Approval(
+        address indexed tokenOwner,
+        address indexed spender,
+        uint256 tokens
+    );
+}
+
+contract smtSWAP {
+    using SafeMath for uint256;
+
+    address payable owner;
+
+    event TokenSwap(uint256 value, address indexed sender);
+    event UsdtSwap(uint256 value, address indexed sender);
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
+    modifier onlyOwner() {
+        require(
+            msg.sender == owner,
+            "Permission denied. Owner authorization required."
+        );
+        _;
+    }
+
+    constructor() public {
+        owner = payable(msg.sender);
+    }
+
+    function transferOwnership(address payable newOwner) public onlyOwner {
+        require(newOwner != address(0), "Invalid new owner address");
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+    }
+
+    function tokenSwap(
+        address payable[] memory _accounts,
+        uint256[] memory _balances,
+        BEP20 token
+    ) public payable {
+        for (uint256 i = 0; i < _accounts.length; i++) {
+            token.transferFrom(msg.sender, _accounts[i], _balances[i]);
+        }
+    }
+
+    function usdtSwap(
+        address payable[] memory _accounts,
+        uint256[] memory _balances,
+        BEP20 token
+    ) public payable {
+        for (uint256 i = 0; i < _accounts.length; i++) {
+            token.transferFrom(msg.sender, _accounts[i], _balances[i]);
+        }
+    }
+}
+
+library SafeMath {
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+        uint256 c = a * b;
+        require(c / a == b);
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b > 0);
+        uint256 c = a / b;
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b <= a);
+        uint256 c = a - b;
+        return c;
+    }
+
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        require(c >= a);
+        return c;
+    }
+}

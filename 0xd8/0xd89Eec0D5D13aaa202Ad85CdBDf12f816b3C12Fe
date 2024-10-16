@@ -1,0 +1,350 @@
+
+// File: contracts/interfaces/BonusesContractInterface.sol
+pragma solidity ^0.8.0;
+
+interface BonusesContractInterface {
+    function setBonus(address user, uint256 amount) external;
+    function setStatusBonus(address user, uint256 amount) external;
+    function withdraw(uint256 amount) external;
+    function emergencyWithdraw(address tokenAddress, uint256 amount) external;
+    function blockUser(address user, bool isBlock) external;
+}
+
+
+// File: contracts/interfaces/IERC20.sol
+// SPDX-License-Identifier: Unlicensed
+pragma solidity ^0.8.0;
+
+interface IERC20 {
+
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function mint(address to, uint256 amount) external;
+    function burn(address from, uint256 amount) external;
+    function decimals() external view returns (uint8);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+// File: contracts/interfaces/PriceRateInterface.sol
+// SPDX-License-Identifier: Unlicensed
+pragma solidity ^0.8.0;
+
+interface PriceRateInterface {
+
+    function getRateIn(uint256 inAmount) external view returns(uint256);
+    function getRateOut(uint256 outAmount) external view returns(uint256);
+    function getCurrentPrice() external view returns (uint256);
+}
+
+
+// File: contracts/libraries/Ownable.sol
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.9;
+
+
+contract Context {
+    // Empty internal constructor, to prevent people from mistakenly deploying
+    // an instance of this contract, which should be used via inheritance.
+    constructor () {}
+
+    function _msgSender() internal view returns (address payable) {
+        return payable(msg.sender);
+    }
+
+    function _msgData() internal view returns (bytes memory) {
+        this; // silence state mutability warning without generating bytecode - see https://github.com/ethereum/solidity/issues/2691
+        return msg.data;
+    }
+}
+
+contract Ownable is Context {
+    address private _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    /**
+     * @dev Initializes the contract setting the deployer as the initial owner.
+     */
+    constructor () {
+        address msgSender = _msgSender();
+        _owner = msgSender;
+        emit OwnershipTransferred(address(0), msgSender);
+    }
+
+    /**
+     * @dev Returns the address of the current owner.
+     */
+    function owner() public view returns (address) {
+        return _owner;
+    }
+
+    /**
+     * @dev Throws if called by any account other than the owner.
+     */
+    modifier onlyOwner() {
+        require(_owner == _msgSender(), "Ownable: caller is not the owner");
+        _;
+    }
+
+    /**
+     * @dev Leaves the contract without owner. It will not be possible to call
+     * `onlyOwner` functions anymore. Can only be called by the current owner.
+     *
+     * NOTE: Renouncing ownership will leave the contract without an owner,
+     * thereby removing any functionality that is only available to the owner.
+     */
+    function renounceOwnership() public onlyOwner {
+        emit OwnershipTransferred(_owner, address(0));
+        _owner = address(0);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     * Can only be called by the current owner.
+     */
+    function transferOwnership(address newOwner) public onlyOwner {
+        _transferOwnership(newOwner);
+    }
+
+    /**
+     * @dev Transfers ownership of the contract to a new account (`newOwner`).
+     */
+    function _transferOwnership(address newOwner) internal {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        emit OwnershipTransferred(_owner, newOwner);
+        _owner = newOwner;
+    }
+}
+
+
+// File: contracts/SaleLime.sol
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.9;
+
+import './libraries/Ownable.sol';
+import './interfaces/IERC20.sol';
+import './interfaces/PriceRateInterface.sol';
+import "./interfaces/BonusesContractInterface.sol";
+
+contract SaleLime is Ownable {
+    event BUY(uint256 usdtAmount, uint256 tokensAmount);
+    event SELL(uint256 usdtAmount, uint256 tokensAmount);
+    event EXCHANGE(uint256 tokensAmount);
+
+    constructor (
+        address usdtAddress
+    ) {
+        _usdtContract = IERC20(usdtAddress);
+
+        _inviter[msg.sender] = msg.sender;
+
+        uint256 usdtDec = 10 ** _usdtContract.decimals();
+        levelsArray.push(level(0, 0, 0, 1, 10, 2));
+        levelsArray.push(level(1000 * usdtDec, 20_000 * usdtDec, 500 * usdtDec, 2, 10, 3));
+        levelsArray.push(level(2000 * usdtDec, 40_000 * usdtDec, 1000 * usdtDec, 3, 10, 4));
+        levelsArray.push(level(4000 * usdtDec, 70_000 * usdtDec, 2000 * usdtDec, 4, 10, 5));
+        levelsArray.push(level(7000 * usdtDec, 100_000 * usdtDec, 3000 * usdtDec, 5, 10, 6));
+        levelsArray.push(level(10_000 * usdtDec, 200_000 * usdtDec, 5000 * usdtDec, 6, 10, 7));
+        levelsArray.push(level(15_000 * usdtDec, 500_000 * usdtDec, 10_000 * usdtDec, 7, 10, 8));
+        levelsArray.push(level(25_000 * usdtDec, 1_000_000 * usdtDec, 25_000 * usdtDec, 8, 10, 9));
+        levelsArray.push(level(50_000 * usdtDec, 2_500_000 * usdtDec, 50_000 * usdtDec, 9, 10, 10));
+        levelsArray.push(level(100_000 * usdtDec, 5_000_000 * usdtDec, 100_000 * usdtDec, 10, 10, 0));
+
+        userLevel[msg.sender] = levelsArray[0];
+    }
+    //  @dev token to track invest amount
+    IERC20 public _tokenForSale;
+    //  @dev token to swap
+    IERC20 public _rewardToken;
+    //  @dev token usdt
+    IERC20 public _usdtContract;
+
+    PriceRateInterface public _priceRate;
+    BonusesContractInterface public _bonusesContract;
+    mapping(address => uint256) public _lastBuyTime;
+    uint public SALE_PERCENT = 10;
+    uint256 public _timeToSale = 30 * 86_400;
+
+    mapping(address => level) public userLevel;
+    level[] public levelsArray;
+    mapping(address => mapping(address => uint256)) public userFirstLineAmount;
+    mapping(address => address[]) public firstLine;
+    mapping(address => uint256) public _totalSpendUsdt;
+
+    struct level {
+        uint256 amount;
+        uint256 teamAmount;
+        uint256 bonusAmount;
+        uint256 level;
+        uint256 refPercent;
+        uint256 nextLevel;
+    }
+
+    uint32 public _rate;
+
+    mapping(address => address) public _inviter;
+
+    function getUserFirstLineAmount(address _inviterAddress, address _userAddress) external view returns(uint256) {
+        return userFirstLineAmount[_inviterAddress][_userAddress];
+    }
+
+    function setTimeToSale(uint256 _newTime) external onlyOwner {
+        _timeToSale = _newTime;
+    }
+
+    function getUserLevel(address _userAddress) external view returns(level memory) {
+        return userLevel[_userAddress];
+    }
+
+    function setSalePercent(uint newPercent) external onlyOwner {
+        SALE_PERCENT = newPercent;
+    }
+
+    function setTokenForSale(address sellTokenAddress) external onlyOwner {
+        _tokenForSale = IERC20(sellTokenAddress);
+    }
+
+    function setBonusesContract(address _bonusesContractAddress) external onlyOwner {
+        _bonusesContract = BonusesContractInterface(_bonusesContractAddress);
+    }
+
+    function setRewardToken(address rewardTokenAddress) external onlyOwner {
+        _rewardToken = IERC20(rewardTokenAddress);
+    }
+
+    function setRateContract(address rateAddress) external onlyOwner {
+        _priceRate = PriceRateInterface(rateAddress);
+    }
+
+    function calculateIn(uint256 inAmount) external view returns(uint256) {
+        return _calculateInAmount(inAmount);
+    }
+
+    function _calculateInAmount(uint256 inAmount) internal view returns(uint256) {
+        return _priceRate.getRateIn(inAmount);
+    }
+
+    function buyBackTime(address user) external view returns(uint256) {
+        return _buyBackTime(user);
+    }
+
+    function _buyBackTime(address user) internal view returns(uint256) {
+        return _lastBuyTime[user] + _timeToSale;
+    }
+
+    function buyToken(uint256 inAmount, address refAddress) external {
+        address user = msg.sender;
+        require(_usdtContract.allowance(user, address(this)) >= inAmount, 'Error: allowance to low');
+
+        _usdtContract.transferFrom(user, address(this), inAmount);
+        _lastBuyTime[user] = block.timestamp;
+
+        if (_inviter[user] == address(0)) {
+            require(refAddress != address(0), 'Error: error inviter');
+            require(_inviter[refAddress] != address(0), 'Error: error inviter for refAddress');
+
+            _inviter[user] = refAddress;
+            firstLine[refAddress].push(user);
+        }
+
+        if (userLevel[user].level == 0) {
+            userLevel[user] = levelsArray[0];
+        }
+
+        uint256 tokenForSaleAmount = _priceRate.getRateIn(inAmount);
+        _updateLevelVolume(user, inAmount);
+        _totalSpendUsdt[user] += inAmount;
+
+        _tokenForSale.mint(user, tokenForSaleAmount);
+        emit BUY(inAmount, tokenForSaleAmount);
+    }
+
+    // @dev update permanent structure volume for ranks
+    function _updateLevelVolume(address user, uint256 amount) internal {
+        address inviter = _inviter[user];
+
+        while (inviter != user) {
+            userFirstLineAmount[inviter][user] += amount;
+            _checkLevel(inviter);
+
+            user = inviter;
+            inviter = _inviter[user];
+        }
+    }
+
+    // @dev check user level and get a prize
+    function _checkLevel(address user) internal {
+        level memory currentLevel = userLevel[user];
+        if (currentLevel.nextLevel == 0) {
+            return;
+        }
+        level memory nextLevel = levelsArray[currentLevel.nextLevel - 1];
+        uint256 total = 0;
+        uint256 max = 0;
+        uint256 lineAmount = 0;
+        for (uint256 i = 0; i < firstLine[user].length; i++) {
+            lineAmount = userFirstLineAmount[user][firstLine[user][i]];
+            total += lineAmount;
+            if (lineAmount > max) {
+                max = lineAmount;
+            }
+        }
+        uint256 lowLevelAmount = total - max;
+        if (_totalSpendUsdt[user] >= nextLevel.amount
+            && lowLevelAmount >= nextLevel.teamAmount / 2
+            && total >= nextLevel.teamAmount
+        ) {
+            userLevel[user] = nextLevel;
+            if (nextLevel.bonusAmount > 0) {
+                _bonusesContract.setStatusBonus(user, nextLevel.bonusAmount);
+            }
+        }
+    }
+
+    function returnTokens(uint256 amount) external {
+        address user = msg.sender;
+        uint256 time = block.timestamp;
+        require(time >= _buyBackTime(user), 'Error: error buyback time');
+        require(amount <= _tokenForSale.balanceOf(user) * SALE_PERCENT / 100, 'Error: only 10% available for sale');
+
+        _lastBuyTime[user] = time;
+        _tokenForSale.burn(user, amount);
+
+        uint256 usdtAmount = _priceRate.getRateOut(amount);
+
+        _usdtContract.transfer(user, usdtAmount);
+        emit SELL(amount, usdtAmount);
+    }
+
+    function swapTokens(uint256 amount) external {
+        address user = msg.sender;
+        uint256 time = block.timestamp;
+        require(time >= _buyBackTime(user), 'Error: error buyback time');
+        require(amount <= _tokenForSale.balanceOf(user) * SALE_PERCENT / 100, 'Error: only 10% available for sale');
+
+        _lastBuyTime[user] = time;
+        _tokenForSale.burn(user, amount);
+
+        _rewardToken.transfer(user, amount);
+        emit EXCHANGE(amount);
+    }
+
+    function withdraw(address _tokenAddress, address _transferTo, uint256 _tokenAmount) external onlyOwner {
+        IERC20 token = IERC20(_tokenAddress);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance >= _tokenAmount, 'Error: error amount');
+        require(_tokenAmount > 0, 'Error: token amount must be greater 0');
+
+        token.transfer(_transferTo, _tokenAmount);
+    }
+
+    function setLevel(address user, uint256 levelId) external onlyOwner {
+        userLevel[user] = levelsArray[levelId];
+    }
+}
+

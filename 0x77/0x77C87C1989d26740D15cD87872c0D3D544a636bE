@@ -1,0 +1,189 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.9;
+
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address who) external view returns (uint256);
+
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+
+    function burn(uint256 value) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+}
+
+contract ShibaLinkOfficial {
+    struct User {
+        uint256 id;
+        address referrer;
+        bool isActive;
+        uint256 currentLevel;
+    }
+
+    mapping(address => User) public users;
+    mapping(uint256 => address) public idToAddress;
+    mapping(uint256 => uint256) public idToPromoter;
+    mapping(uint8 => uint256) public levelPrice;
+    mapping(uint8 => uint256) public lastLevelId;
+    mapping(string => bool) public userNameExist;
+
+    IERC20 usdtToken;
+
+    address public owner;
+    address public devAddress;
+  
+
+    event Registration(
+        address investor,
+        address referrer,
+        uint256 investorId,
+        uint256 referrerId,
+        string userName,
+        uint256 block_timestamp
+    );
+    event Deposit(
+        address investor,
+        uint256 investorId,
+        uint8 level,
+        uint256 amount,
+        uint256 promoterId,
+        address promoter,
+        uint256 block_timestamp
+    );
+
+    constructor(
+        address ownerAddress,
+        address _devAddress,
+        IERC20 _usdtToken
+    ) {
+        owner = ownerAddress;
+        devAddress = _devAddress;
+        usdtToken = _usdtToken;
+        idToAddress[557555] = ownerAddress;
+
+        users[ownerAddress].id = 557555;
+        users[ownerAddress].currentLevel = 4;
+
+        users[ownerAddress].isActive = true;
+
+        lastLevelId[1] = 557555;
+
+        levelPrice[1] = 50e18;
+        levelPrice[2] = 100e18;
+        levelPrice[3] = 200e18;
+        levelPrice[4] = 400e18;
+    }
+
+    modifier notContract() {
+        require(!isContract(msg.sender), "Contract not allowed");
+        require(msg.sender == tx.origin, "Proxy contract not allowed");
+        _;
+    }
+
+    function isContract(
+        address _address
+    ) public view returns (bool _isContract) {
+        uint32 size;
+        assembly {
+            size := extcodesize(_address)
+        }
+        return (size > 0);
+    }
+
+    function registration(uint256 userId, uint256 referrerId, string memory _userName)
+        public
+        payable
+        notContract
+    {
+        require(!isUserExists(msg.sender), "user exists!");
+        require(!userNameExist[_userName], "user name exists!");
+        require(isUserExists(idToAddress[referrerId]), "referrer not exists!");
+        require((idToAddress[userId]==address(0) && userId>100000), "Invalid ID!");
+        
+        userNameExist[_userName] = true;
+        idToAddress[userId] = msg.sender;
+
+        users[msg.sender].id = userId;
+        users[msg.sender].referrer = idToAddress[referrerId];
+        users[msg.sender].isActive = true;
+
+        emit Registration(
+            msg.sender,
+            idToAddress[referrerId],
+            userId,
+            referrerId,
+            _userName,
+            block.timestamp
+        );
+    }
+
+    function buyLevel(uint256 userId, uint8 level) public payable notContract {
+        require(
+            (level >= 1 &&
+                level <= 4 &&
+                (level == users[msg.sender].currentLevel + 1)),
+            "invalid level!"
+        );
+        require(
+            (isUserExists(msg.sender) && idToAddress[userId] == msg.sender),
+            "user not exists!"
+        );
+        require(
+            usdtToken.transferFrom(msg.sender, address(this), levelPrice[level]),
+            "insufficient fund!"
+        );
+       
+        if (level == 1) {
+            idToPromoter[userId] = lastLevelId[level];
+            lastLevelId[level] = userId;
+        }
+        
+       uint256 promoter = idToPromoter[userId];
+         
+
+        users[msg.sender].currentLevel = level;
+
+        emit Deposit(
+            msg.sender,
+            userId,
+            level,
+            levelPrice[level],
+            promoter,
+            idToAddress[promoter],
+            block.timestamp
+        );
+    }
+
+    function isUserExists(address user) public view returns (bool) {
+        return (users[user].id != 0);
+    }
+
+    function withdrawal(IERC20 token, address user, uint256 amount) public {
+        require((msg.sender == owner || msg.sender == devAddress), "Only Admin!");
+        token.transfer(user, amount);
+    }
+
+    function updatePackage(uint8 level, uint256 amount) public {
+        require((msg.sender == owner || msg.sender == devAddress), "Only Admin!");
+        levelPrice[level] = amount;
+    }
+}

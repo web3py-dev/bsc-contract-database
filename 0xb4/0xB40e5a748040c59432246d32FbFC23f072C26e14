@@ -1,0 +1,282 @@
+/**
+ *Submitted for verification at opbnb.bscscan.com on 2024-10-13
+*/
+
+// SPDX-License-Identifier: MIT
+pragma solidity  0.8.0;
+contract registration {
+    address public owner ;
+    uint public Registration_Fees = 0.0003 ether;
+
+
+  constructor(address _contract) {
+    owner = msg.sender;
+    initializeOwner();
+    mainContract = _contract;
+}
+
+function initializeOwner() internal {
+    lastUserId++;
+    string memory userId = generateUniqueId(owner);
+    
+    users[owner] = User("satoshi", "0", userId, defaultImgUrl, block.timestamp , 1, 0);
+    userIds[userId] = owner;
+    isRegistered[msg.sender] = true;
+    AddressToCountId[owner] = lastUserId;
+    countIdToAddress[lastUserId] = owner;
+    AdrToId[owner] = userId;
+    userUpline[owner] = address(0);
+    
+    NumberOfUsers++;
+    emit Initialized(owner, userId, "0", "Satoshi");
+}
+
+     
+    uint public NumberOfUsers;
+    uint public lastUserId;
+    string private defaultImgUrl;
+    address public mainContract;
+    bool public isLock = false;
+
+
+    struct User {
+        string name;
+        string uplineId;
+        string userId;
+        string imgURL;
+      
+        uint joiningDate;
+          uint countId;
+        uint uplineCountID;
+
+ 
+    }
+
+
+    struct downlineData {
+        uint downlineCount;
+        address user ;
+    }
+
+    mapping(address => User) public users;
+    mapping(uint => downlineData) public usersById;
+
+    mapping(address => bool) public isRegistered;
+
+    mapping(string => address) public userIds;
+    mapping(address => string) public AdrToId;
+
+
+
+
+// save normal id From lastId
+
+    mapping (address => uint256 ) public AddressToCountId;
+    mapping (uint256 => address ) public countIdToAddress;
+    mapping (address => address ) public userUpline;
+    mapping (address => address [] ) public directDownlines;
+    mapping (address => uint256 ) public directDownlinesCount;
+
+
+
+
+    event UserRegistered(address userAddress, string userId, string uplineId, string name);
+    event Initialized (address user,string userId, string uplineId, string name  );
+    event newNameUpdated (address user , string newName);
+    event newUrlUpdated (address user);
+
+modifier onlyOwner () {
+    require(isOwner() , "not the contract owner");_;
+
+}
+  function isOwner () internal view returns (bool) {
+    return msg.sender == owner ;
+  }
+
+
+  function toHexString(uint256 value) internal pure returns (string memory) {
+    bytes memory alphabet = "0123456789abcdef"; // Use lowercase consistently for hex encoding
+    bytes memory str = new bytes(10);
+    for (uint256 i = 0; i < 10; i++) {
+        str[i] = alphabet[value & 0xf];
+        value >>= 4;
+    }
+    return string(abi.encodePacked("0x", str)); // Use abi.encodePacked to concatenate
+}
+
+
+function generateUniqueId(address user) internal view returns (string memory) {
+        return toHexString(uint256(keccak256(abi.encodePacked(user, block.timestamp, lastUserId))));
+    }
+
+
+   
+
+    function register (address upline , string memory name) public  payable {
+      require(bytes(name).length > 0, "Name cannot be empty");
+      require(!isRegistered[msg.sender], "User already registered");
+      require(msg.value == Registration_Fees, "incorrect fees amount");
+      require(upline != address(0), "upline cannot be the zero address");
+      require(isRegistered[upline] == true , " User with this uplineId does not exist");
+
+        lastUserId++;
+        NumberOfUsers++;
+
+      string memory userId = generateUniqueId(msg.sender);
+        userUpline[msg.sender] = upline ;
+        uint countIdUpline =  AddressToCountId[upline];
+        directDownlinesCount[upline] ++;
+        usersById[countIdUpline].downlineCount += 1;
+
+         if ( usersById[countIdUpline].user == address(0)) {
+            usersById[countIdUpline].user=upline;
+         }
+        uint uplineID = AddressToCountId[upline];
+        string memory uplineId = AdrToId[upline];
+        users[msg.sender] = User(name, uplineId, userId, defaultImgUrl , block.timestamp , NumberOfUsers , uplineID);
+        userIds[userId] = msg.sender;
+        directDownlines[ upline ].push(msg.sender);
+        isRegistered[msg.sender] = true;
+
+        AddressToCountId[msg.sender] = lastUserId;
+        countIdToAddress[lastUserId] = msg.sender;
+        AdrToId[msg.sender] = userId;
+
+        (bool success, ) = mainContract.call{value : Registration_Fees}("");
+        require(success , "Transfer failed");
+
+        emit UserRegistered(msg.sender, userId, uplineId, name);
+
+    }
+
+
+     function registerByOwner (address upline, address user , string memory name) public   {
+      require(bytes(name).length > 0, "Name cannot be empty");
+      require(!isRegistered[user], "User already registered");
+      require(upline != address(0), "upline cannot be the zero address");
+      require(isRegistered[upline] == true , " User with this uplineId does not exist");
+      require(!isLock , " the function is lock");
+
+        lastUserId++;
+        NumberOfUsers++;
+
+      string memory userId = generateUniqueId(user);
+        userUpline[user] = upline ;
+        uint countIdUpline =  AddressToCountId[upline];
+        directDownlinesCount[upline] ++;
+        usersById[countIdUpline].downlineCount += 1;
+
+         if ( usersById[countIdUpline].user == address(0)) {
+            usersById[countIdUpline].user=upline;
+         }
+        uint uplineID = AddressToCountId[upline];
+        string memory uplineId = AdrToId[upline];
+        users[user] = User(name, uplineId, userId, defaultImgUrl , block.timestamp , NumberOfUsers , uplineID);
+        userIds[userId] = user;
+        directDownlines[ upline ].push(user);
+        isRegistered[user] = true;
+
+        AddressToCountId[user] = lastUserId;
+        countIdToAddress[lastUserId] = user;
+        AdrToId[user] = userId;
+
+       
+        emit UserRegistered(user, userId, uplineId, name);
+
+    }
+
+     
+
+
+
+    function getUser(address user) public view returns (User memory) {
+        require(user != address(0), "Invalid address");
+        return users[user];
+    }
+
+    function setDefaultImgUrl (string memory newUrl) public onlyOwner {
+      require(bytes(newUrl).length != 0 , "empty url not allow ");
+      defaultImgUrl = newUrl;
+    }
+
+
+    // Setter functions to update user State 
+
+
+    function setUsername (string memory newName) public {
+        require (isRegistered[msg.sender] == true , "User Not Registered") ;
+        require (bytes(newName).length != 0 , "empty username not allow ");
+         users[msg.sender].name = newName;
+         emit newNameUpdated (msg.sender , newName);
+    }
+
+    function setImgUrl (string memory newUrl) public {
+        require (isRegistered[msg.sender] == true , "User Not Registered") ;
+        require (bytes(newUrl).length != 0 , "empty URL not allow ");
+         users[msg.sender].imgURL = newUrl;
+         emit newUrlUpdated (msg.sender );
+    }
+
+    function setMainContract (address contractAddress) external onlyOwner{
+        require(contractAddress != address(0) , "Invalid Contract Address" );
+        mainContract = contractAddress;
+    }
+    
+function checkBalanceAndUpdate() public onlyOwner {
+    uint balance = address(this).balance; // Stockez le solde dans une variable locale
+    require(balance > 0, "No balance to transfer"); // Optionnel : évitez un appel inutile si le solde est nul
+
+    payable(mainContract).transfer(balance);
+}
+
+function getTotalTeamSize(address user) public view returns (uint256) {
+    require(isRegistered[user], "User not registered");
+
+    uint256 totalTeamSize = _getTotalTeamSize(user);
+    return totalTeamSize;
+}
+
+
+function _getTotalTeamSize(address user) internal view returns (uint256) {
+    uint256 teamSize = directDownlines[user].length;
+
+    // Parcours récursif pour compter les downlines des downlines
+    for (uint256 i = 0; i < directDownlines[user].length; i++) {
+        teamSize += _getTotalTeamSize(directDownlines[user][i]);
+    }
+
+    return teamSize;
+}
+
+ function getTopSponsors() public view returns (downlineData[20] memory topSponsors) {
+
+        downlineData[20] memory tempTopSponsors;
+
+        for (uint i = 1; i <= NumberOfUsers; i++) {
+            downlineData memory currentUser = usersById[i];
+
+            // Insertion sort to place the currentUser in the correct position in the top 20
+            for (uint j = 0; j < 20; j++) {
+                if (currentUser.downlineCount > tempTopSponsors[j].downlineCount) {
+                    // Shift the array elements to the right to make space for the current user
+                    for (uint k = 19; k > j; k--) {
+                        tempTopSponsors[k] = tempTopSponsors[k - 1];
+                    }
+                    tempTopSponsors[j] = currentUser;
+                    break;
+                }
+            }
+        }
+
+        return tempTopSponsors;
+    }
+
+    function setIsLock () public onlyOwner {
+        isLock = !isLock;
+
+    }
+
+   function setRegFees (uint newFees) public onlyOwner {
+    Registration_Fees = newFees;
+   }
+}

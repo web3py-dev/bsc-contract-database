@@ -1,0 +1,866 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.19;
+
+interface IERC20 {
+    function decimals() external view returns (uint8);
+
+    function symbol() external view returns (string memory);
+
+    function name() external view returns (string memory);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address account) external view returns (uint256);
+
+    function transfer(address recipient, uint256 amount) external returns (bool);
+
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    function approve(address spender, uint256 amount) external returns (bool);
+
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+abstract contract Ownable {
+    address private _owner;
+
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    constructor () {
+        address msgSender = msg.sender;
+        _owner = msgSender;
+        emit OwnershipTransferred(address(0), msgSender);
+    }
+
+    function owner() public view returns (address) {
+        return _owner;
+    }
+
+    modifier onlyOwner() {
+        require(_owner == msg.sender, "!o");
+        _;
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        emit OwnershipTransferred(_owner, address(0));
+        _owner = address(0);
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "n0");
+        emit OwnershipTransferred(_owner, newOwner);
+        _owner = newOwner;
+    }
+}
+
+interface ISwapRouter {
+    function WETH() external pure returns (address);
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external;
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external returns (uint amountA, uint amountB, uint liquidity);
+}
+
+interface INFT {
+    function totalSupply() external view returns (uint256);
+
+    function MAX() external view returns (uint256);
+
+    function balanceOf(address owner) external view returns (uint256 balance);
+
+    function ownerOf(uint256 tokenId) external view returns (address owner);
+
+    function mint(address to) external;
+}
+
+interface ITokenInfo {
+    function nftTotalReward() external view returns (uint256);
+
+    function nftReward(address owner) external view returns (uint256);
+}
+
+contract MintPool is Ownable {
+    struct UserInfo {
+        uint256 amount;
+        uint256 rewardDebt;
+        uint256 rewardDebt2;
+
+        uint256 inviteAmount;
+
+        uint256 usdtAmount;
+        uint256 inviteUsdtAmount;
+        uint256 nftNum;
+    }
+
+    struct PoolInfo {
+        uint256 totalUsdt;
+        uint256 totalAmount;
+        uint256 lastRewardBlock;
+
+        uint256 rewardPerBlock;
+        uint256 accPerShare;
+        uint256 accReward;
+        uint256 totalReward;
+
+        uint256 rewardPerBlock2;
+        uint256 accPerShare2;
+        uint256 accReward2;
+        uint256 totalReward2;
+    }
+
+    PoolInfo public poolInfo;
+    mapping(address => UserInfo) public userInfo;
+    uint256 private constant _rewardFactor = 1e18;
+
+    uint256 public _inviteFee = 1000;
+    mapping(address => bool) public _active;
+    mapping(address => address) public _invitor;
+    mapping(address => address[]) public _binder;
+
+    ISwapRouter public immutable _swapRouter;
+    address public immutable _weth;
+    address public immutable _usdt;
+    address public immutable _token;
+    address public immutable _rewardToken;
+    uint256 private constant _dayBlocks = 1 days / 3;
+    uint256 public _minUsdt;
+    address public _defaultInvitor;
+
+    uint256 public _nftUsdt;
+    uint256 public _nftInviteUsdt;
+    address public _fundAddress;
+    address public _lpReceiver = address(0xc959901298203C2c8aB6C56373E3E2BFab6cc6a9);
+
+    uint256 public _fundRate = 1000;
+    uint256 public _rewardRate = 4000;
+    uint256 public _lpRate = 4000;
+    uint256 public _inviteRate = 1000;
+
+    uint256 public _lastDailyUpTime;
+    uint256 public _lastAmountRate = 10000;
+    uint256 public _amountDailyUp = 10100;
+    uint256 private constant _divFactor = 10000;
+    uint256 private constant _dailyDuration = 1 days;
+
+    bool public _pauseJoin = true;
+    INFT public _nft;
+
+    function getTokenInfo() public view returns (
+        address usdt, uint256 usdtDecimals, string memory usdtSymbol,
+        address token, uint256 tokenDecimals, string memory tokenSymbol,
+        address rewardToken, uint256 rewardTokenDecimals, string memory rewardTokenSymbol
+    ){
+        usdt = _usdt;
+        usdtDecimals = IERC20(usdt).decimals();
+        usdtSymbol = IERC20(usdt).symbol();
+        token = _token;
+        tokenDecimals = IERC20(token).decimals();
+        tokenSymbol = IERC20(token).symbol();
+        rewardToken = _rewardToken;
+        rewardTokenDecimals = IERC20(rewardToken).decimals();
+        rewardTokenSymbol = IERC20(rewardToken).symbol();
+    }
+
+    function getMintInfo() public view returns (
+        bool pauseJoin, uint256 minUsdt,
+        uint256 amountRate, uint256 totalUsdt, uint256 totalAmount,
+        uint256 tokenBalance, uint256 rewardTokenBalance,
+        uint256 tokenPerDay, uint256 rewardTokenPerDay,
+        uint256 mintInviteFee
+    ){
+        pauseJoin = _pauseJoin;
+        minUsdt = _minUsdt;
+        amountRate = getDailyRate();
+        totalUsdt = poolInfo.totalUsdt;
+        totalAmount = poolInfo.totalAmount;
+        tokenBalance = IERC20(_token).balanceOf(address(this));
+        rewardTokenBalance = IERC20(_rewardToken).balanceOf(address(this));
+        tokenPerDay = poolInfo.rewardPerBlock * _dayBlocks;
+        rewardTokenPerDay = poolInfo.rewardPerBlock2 * _dayBlocks;
+        mintInviteFee = _inviteFee;
+    }
+
+    function getUserMintInfo(address account) public view returns (
+        uint256 amount, uint256 inviteAmount,
+        uint256 pendingToken, uint256 pendingRewardToken,
+        uint256 usdtBalance, uint256 usdtAllowance
+    ){
+        amount = userInfo[account].amount;
+        inviteAmount = userInfo[account].inviteAmount;
+        (pendingToken, pendingRewardToken) = _pendingReward(account);
+        usdtBalance = IERC20(_usdt).balanceOf(account);
+        usdtAllowance = IERC20(_usdt).allowance(account, address(this));
+    }
+
+    function getNFTInfo() public view returns (
+        uint256 nftMax, uint256 nftTotal,
+        uint256 nftUsdt, uint256 nftInviteUsdt,
+        uint256 nftTotalReward
+    ){
+        nftMax = _nft.MAX();
+        nftTotal = _nft.totalSupply();
+        nftUsdt = _nftUsdt;
+        nftInviteUsdt = _nftInviteUsdt;
+        nftTotalReward = ITokenInfo(_token).nftTotalReward();
+    }
+
+    function getUserNFTInfo(address account) public view returns (
+        uint256 usdtAmount, uint256 inviteUsdt,
+        uint256 nftNum, uint256 nftBalance,
+        uint256 nftReward
+    ){
+        usdtAmount = userInfo[account].usdtAmount;
+        inviteUsdt = userInfo[account].inviteUsdtAmount;
+        nftNum = userInfo[account].nftNum;
+        nftBalance = _nft.balanceOf(account);
+        nftReward = ITokenInfo(_token).nftReward(account);
+    }
+
+    function getBurnInfo() public view returns (
+        bool burnPause, uint256 burnRewardRate, uint256 burnMinAmount,
+        uint256 burnTotal, uint256 burnMax,
+        uint256 burnInviteFee
+    ){
+        burnPause = _burnPause;
+        burnRewardRate = _burnRewardRate;
+        burnMinAmount = _burnMinAmount;
+        burnTotal = _burnTotal;
+        burnMax = _burnMax;
+        burnInviteFee = _burnInviteFee;
+    }
+
+    function getUserBurnInfo(address account) public view returns (
+        uint256 burnAmount, uint256 burnRewardBalance,
+        uint256 pendingBurnReward, uint256 dailyRewardAmount, uint256 burnInviteReward,
+        uint256 tokenBalance, uint256 tokenAllowance
+    ){
+        burnAmount = _burnInfo[account].totalAmount;
+        burnRewardBalance = _burnInfo[account].rewardBalance;
+        pendingBurnReward = calPendingBurnReward(account);
+        dailyRewardAmount = _burnInfo[account].dailyRewardAmount;
+        burnInviteReward = _burnInfo[account].inviteReward;
+        tokenBalance = IERC20(_token).balanceOf(account);
+        tokenAllowance = IERC20(_token).allowance(account, address(this));
+    }
+    
+    function getBinderList(
+        address account,
+        uint256 start,
+        uint256 len
+    ) external view returns (
+        address[] memory binderList,
+        uint256[] memory mintUsdt,
+        uint256[] memory burnAmount
+    ){
+        address[] storage _binderList = _binder[account];
+        if (start > _binderList.length) {
+            start = _binderList.length;
+        }
+        if (0 == len || len > _binderList.length - start) {
+            len = _binderList.length - start;
+        }
+        binderList = new address[](len);
+        mintUsdt = new uint256[](len);
+        burnAmount = new uint256[](len);
+        uint256 index = 0;
+        for (uint256 i = start; i < start + len; ++i) {
+            address adr = _binderList[i];
+            binderList[index] = adr;
+            mintUsdt[index] = userInfo[adr].usdtAmount;
+            burnAmount[index] = _burnInfo[adr].totalAmount;
+            ++index;
+        }
+    }
+
+    function join(uint256 usdtAmount, address invitor) external {
+        require(!_pauseJoin, "pause");
+        require(usdtAmount >= _minUsdt, "minUsdt");
+        _updatePool();
+        _updateDailyUpRate();
+
+        address account = msg.sender;
+        require(tx.origin == account, "EOA");
+        _bindInvitor(account, invitor);
+
+        UserInfo storage user = userInfo[account];
+        _claim(user, account);
+
+        usdtAmount = _takeToken(_usdt, account, address(this), usdtAmount);
+        _distributeUsdt(account, usdtAmount);
+        user.usdtAmount += usdtAmount;
+
+        uint256 amount = usdtAmount * _lastAmountRate / _divFactor;
+
+        PoolInfo storage pool = poolInfo;
+        pool.totalUsdt += usdtAmount;
+        pool.totalAmount += amount;
+
+        uint256 userAmount = user.amount;
+        userAmount += amount;
+        user.amount = userAmount;
+        user.rewardDebt = userAmount * pool.accPerShare / _rewardFactor;
+        user.rewardDebt2 = userAmount * pool.accPerShare2 / _rewardFactor;
+
+        invitor = _invitor[account];
+        if (invitor != address(0)) {
+            user = userInfo[invitor];
+            _claim(user, invitor);
+
+            amount = amount * _inviteFee / 10000;
+            pool.totalAmount += amount;
+
+            user.inviteUsdtAmount += usdtAmount;
+            user.inviteAmount += amount;
+
+            userAmount = user.amount;
+            userAmount += amount;
+            user.amount = userAmount;
+            user.rewardDebt = userAmount * pool.accPerShare / _rewardFactor;
+            user.rewardDebt2 = userAmount * pool.accPerShare2 / _rewardFactor;
+        }
+    }
+
+    function claim() public {
+        _updatePool();
+        address account = msg.sender;
+        UserInfo storage user = userInfo[account];
+        _claim(user, account);
+    }
+
+    function claimNFT() public {
+        address account = msg.sender;
+        UserInfo storage user = userInfo[account];
+        require(0 == user.nftNum, "claimed");
+        require(user.usdtAmount >= _nftUsdt && user.inviteUsdtAmount >= _nftInviteUsdt, "err amount");
+        user.nftNum += 1;
+        _nft.mint(account);
+    }
+
+    function _distributeUsdt(address account, uint256 usdtAmount) private {
+        uint256 inviteAmount = usdtAmount * _inviteRate / 10000;
+        if (inviteAmount > 0) {
+            address invitor = _invitor[account];
+            if (address(0) == invitor) {
+                invitor = _defaultInvitor;
+            }
+            _giveToken(_usdt, invitor, inviteAmount);
+        }
+        uint256 fundAmount = usdtAmount * _fundRate / 10000;
+        _giveToken(_usdt, _fundAddress, fundAmount);
+        usdtAmount = usdtAmount - inviteAmount - fundAmount;
+        address[] memory path = new address[](2);
+        path[0] = _usdt;
+        path[1] = _weth;
+        _swapRouter.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            usdtAmount,
+            0,
+            path,
+            address(this),
+            block.timestamp
+        );
+        uint256 wethBalance = IERC20(_weth).balanceOf(address(this));
+
+        uint256 lpRate = _lpRate;
+        uint256 totalRate = lpRate + _rewardRate;
+        totalRate += totalRate;
+        uint256 lpWeth = wethBalance * lpRate / totalRate;
+        totalRate -= lpRate;
+
+        uint256 rewardBalance = IERC20(_rewardToken).balanceOf(address(this));
+        path[0] = _weth;
+        path[1] = _rewardToken;
+        _swapRouter.swapExactTokensForTokensSupportingFeeOnTransferTokens(
+            wethBalance - lpWeth,
+            0,
+            path,
+            address(this),
+            block.timestamp
+        );
+
+        rewardBalance = IERC20(_rewardToken).balanceOf(address(this)) - rewardBalance;
+        uint256 lpReward = rewardBalance * lpRate / totalRate;
+        if (lpReward > 0 && lpWeth > 0) {
+            _swapRouter.addLiquidity(_rewardToken, _weth, lpReward, lpWeth, 0, 0, _lpReceiver, block.timestamp);
+        }
+
+        poolInfo.totalReward2 += rewardBalance - lpReward;
+    }
+
+    function setNFT(address adr) external onlyOwner {
+        _nft = INFT(adr);
+    }
+
+    function setMinUsdt(uint256 amount) external onlyOwner {
+        require(amount > 0, "not 0");
+        _minUsdt = amount;
+    }
+
+    function setNFTUsdt(uint256 amount) external onlyOwner {
+        _nftUsdt = amount;
+    }
+
+    function setNFTInviteUsdt(uint256 amount) external onlyOwner {
+        _nftInviteUsdt = amount;
+    }
+
+    function setUsdtRate(
+        uint256 fundRate,
+        uint256 rewardRate,
+        uint256 lpRate,
+        uint256 inviteRate
+    ) external onlyOwner {
+        _fundRate = fundRate;
+        _rewardRate = rewardRate;
+        _lpRate = lpRate;
+        _inviteRate = inviteRate;
+        require(10000 == fundRate + rewardRate + lpRate + inviteRate);
+    }
+
+    function setFundAddress(address a) external onlyOwner {
+        _fundAddress = a;
+    }
+
+    function setLPReceiver(address a) external onlyOwner {
+        _lpReceiver = a;
+    }
+
+    function setDefaultInvitor(address a) external onlyOwner {
+        _defaultInvitor = a;
+        _active[a] = true;
+    }
+
+    function setAmountDailyUp(uint256 r) external onlyOwner {
+        _amountDailyUp = r;
+    }
+
+    function setLastDailyUpTime(uint256 t) external onlyOwner {
+        _lastDailyUpTime = t;
+    }
+
+    function setLastAmountRate(uint256 r) external onlyOwner {
+        _lastAmountRate = r;
+    }
+
+    function _updateDailyUpRate() public {
+        uint256 lastDailyUpTime = _lastDailyUpTime;
+        if (0 == lastDailyUpTime) {
+            return;
+        }
+        uint256 dailyDuration = _dailyDuration;
+        uint256 nowTime = block.timestamp;
+        if (nowTime < lastDailyUpTime + dailyDuration) {
+            return;
+        }
+        uint256 ds = (nowTime - lastDailyUpTime) / dailyDuration;
+        _lastDailyUpTime = lastDailyUpTime + ds * dailyDuration;
+
+        uint256 lastAmountRate = _lastAmountRate;
+        uint256 amountDailyUp = _amountDailyUp;
+        for (uint256 i; i < ds; ++i) {
+            lastAmountRate = lastAmountRate * amountDailyUp / _divFactor;
+        }
+        _lastAmountRate = lastAmountRate;
+    }
+
+    uint256 public _startMintTime;
+
+    function open() external onlyOwner {
+        if (0 == _lastDailyUpTime) {
+            uint256 day = block.timestamp / _dailyDuration;
+            _lastDailyUpTime = day * _dailyDuration;
+            _startMintTime = _lastDailyUpTime;
+        }
+        _pauseJoin = false;
+    }
+
+    function close() external onlyOwner {
+        _pauseJoin = true;
+    }
+
+    function getDailyRate() private view returns (uint256) {
+        uint256 lastAmountRate = _lastAmountRate;
+        uint256 lastDailyUpTime = _lastDailyUpTime;
+        if (0 == lastDailyUpTime) {
+            return lastAmountRate;
+        }
+        uint256 dailyDuration = _dailyDuration;
+        uint256 nowTime = block.timestamp;
+        if (nowTime < lastDailyUpTime + dailyDuration) {
+            return lastAmountRate;
+        }
+        uint256 ds = (nowTime - lastDailyUpTime) / dailyDuration;
+
+        uint256 amountDailyUp = _amountDailyUp;
+        for (uint256 i; i < ds; ++i) {
+            lastAmountRate = lastAmountRate * amountDailyUp / _divFactor;
+        }
+        return lastAmountRate;
+    }
+
+    function _bindInvitor(address account, address invitor) private {
+        if (!_active[account]) {
+            require(_active[invitor], "! invitor");
+            _invitor[account] = invitor;
+            _binder[invitor].push(account);
+            _active[account] = true;
+        }
+    }
+
+    function setRewardPerDay(uint256 rewardPerDay) external onlyOwner {
+        _updatePool();
+        poolInfo.rewardPerBlock = rewardPerDay / _dayBlocks;
+    }
+
+    function setReward2PerDay(uint256 reward2PerDay) external onlyOwner {
+        _updatePool();
+        poolInfo.rewardPerBlock2 = reward2PerDay / _dayBlocks;
+    }
+
+    function setTotalReward(uint256 totalReward) external onlyOwner {
+        _updatePool();
+        poolInfo.totalReward = totalReward;
+    }
+
+    function setTotalReward2(uint256 totalReward2) external onlyOwner {
+        _updatePool();
+        poolInfo.totalReward2 = totalReward2;
+    }
+
+    receive() external payable {}
+
+    function _updatePool() public {
+        PoolInfo storage pool = poolInfo;
+        uint256 blockNum = block.number;
+        uint256 lastRewardBlock = pool.lastRewardBlock;
+        if (blockNum <= lastRewardBlock) {
+            return;
+        }
+        pool.lastRewardBlock = blockNum;
+
+        uint256 totalAmount = pool.totalAmount;
+        if (0 == totalAmount) {
+            return;
+        }
+
+        uint256 accReward = pool.accReward;
+        uint256 totalReward = pool.totalReward;
+        if (accReward < totalReward) {
+            uint256 rewardPerBlock = pool.rewardPerBlock;
+            if (0 < totalAmount && 0 < rewardPerBlock) {
+                uint256 reward = rewardPerBlock * (blockNum - lastRewardBlock);
+                uint256 remainReward = totalReward - accReward;
+                if (reward > remainReward) {
+                    reward = remainReward;
+                }
+                pool.accPerShare += reward * _rewardFactor / totalAmount;
+                pool.accReward += reward;
+            }
+        }
+
+        _updatePool2(pool, totalAmount, blockNum, lastRewardBlock);
+    }
+
+    function _updatePool2(PoolInfo storage pool, uint256 totalAmount, uint256 blockNum, uint256 lastRewardBlock) private {
+        uint256 accReward = pool.accReward2;
+        uint256 totalReward = pool.totalReward2;
+        if (accReward < totalReward) {
+            uint256 rewardPerBlock = pool.rewardPerBlock2;
+            if (0 < totalAmount && 0 < rewardPerBlock) {
+                uint256 reward = rewardPerBlock * (blockNum - lastRewardBlock);
+                uint256 remainReward = totalReward - accReward;
+                if (reward > remainReward) {
+                    reward = remainReward;
+                }
+                pool.accPerShare2 += reward * _rewardFactor / totalAmount;
+                pool.accReward2 += reward;
+            }
+        }
+    }
+
+    function _claim(UserInfo storage user, address account) private {
+        PoolInfo storage pool = poolInfo;
+        uint256 userAmount = user.amount;
+        if (userAmount > 0) {
+            uint256 accReward = userAmount * pool.accPerShare / _rewardFactor;
+            uint256 pendingAmount = accReward - user.rewardDebt;
+            if (pendingAmount > 0) {
+                user.rewardDebt = accReward;
+                _giveToken(_token, account, pendingAmount);
+            }
+            _claim2(pool, user, userAmount, account);
+        }
+    }
+
+    function _claim2(PoolInfo storage pool, UserInfo storage user, uint256 userAmount, address account) private {
+        uint256 accReward = userAmount * pool.accPerShare2 / _rewardFactor;
+        uint256 pendingAmount = accReward - user.rewardDebt2;
+        if (pendingAmount > 0) {
+            user.rewardDebt2 = accReward;
+            _giveToken(_rewardToken, account, pendingAmount);
+        }
+    }
+
+    function _pendingReward(address account) private view returns (
+        uint256 reward, uint256 reward2
+    ) {
+        PoolInfo storage pool = poolInfo;
+        UserInfo storage user = userInfo[account];
+        uint256 amount = user.amount;
+
+        if (amount > 0) {
+            uint256 poolPendingReward;
+            uint256 blockNum = block.number;
+            uint256 lastRewardBlock = pool.lastRewardBlock;
+            if (blockNum > lastRewardBlock) {
+                poolPendingReward = pool.rewardPerBlock * (blockNum - lastRewardBlock);
+                uint256 totalReward = pool.totalReward;
+                uint256 accReward = pool.accReward;
+                uint256 remainReward;
+                if (totalReward > accReward) {
+                    remainReward = totalReward - accReward;
+                }
+                if (poolPendingReward > remainReward) {
+                    poolPendingReward = remainReward;
+                }
+            }
+            uint256 totalAmount = pool.totalAmount;
+            reward = user.amount * (pool.accPerShare + poolPendingReward * _rewardFactor / totalAmount) / _rewardFactor - user.rewardDebt;
+
+            reward2 = _pendingReward2(pool, user, blockNum, lastRewardBlock, totalAmount, amount);
+        }
+    }
+
+    function _pendingReward2(
+        PoolInfo storage pool, UserInfo storage user, uint256 blockNum, uint256 lastRewardBlock, uint256 totalAmount, uint256 amount
+    ) private view returns (uint256 reward) {
+        uint256 poolPendingReward;
+        if (blockNum > lastRewardBlock) {
+            poolPendingReward = pool.rewardPerBlock2 * (blockNum - lastRewardBlock);
+            uint256 totalReward = pool.totalReward2;
+            uint256 accReward = pool.accReward2;
+            uint256 remainReward;
+            if (totalReward > accReward) {
+                remainReward = totalReward - accReward;
+            }
+            if (poolPendingReward > remainReward) {
+                poolPendingReward = remainReward;
+            }
+        }
+        reward = amount * (pool.accPerShare2 + poolPendingReward * _rewardFactor / totalAmount) / _rewardFactor - user.rewardDebt2;
+    }
+
+    function claimBalance(address to, uint256 amount) external onlyOwner {
+        payable(to).transfer(amount);
+    }
+
+    function claimToken(address token, address to, uint256 amount) external onlyOwner {
+        if (_rewardToken != token) {
+            _giveToken(token, to, amount);
+        }
+    }
+
+    function setInviteFee(uint256 f) external onlyOwner {
+        _inviteFee = f;
+    }
+
+    function _giveToken(address tokenAddress, address account, uint256 amount) private {
+        if (0 == amount) {
+            return;
+        }
+        IERC20 token = IERC20(tokenAddress);
+        require(token.balanceOf(address(this)) >= amount, "PTNE");
+        safeTransfer(tokenAddress, account, amount);
+    }
+
+    function _takeToken(address tokenAddress, address from, address to, uint256 tokenNum) private returns (uint256){
+        IERC20 token = IERC20(tokenAddress);
+        require(token.balanceOf(address(from)) >= tokenNum, "TNE");
+        uint256 beforeAmount = token.balanceOf(to);
+        safeTransferFrom(tokenAddress, from, to, tokenNum);
+        return token.balanceOf(to) - beforeAmount;
+    }
+
+    function safeTransfer(address token, address to, uint value) internal {
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, value));
+        if (success && data.length > 0) {}
+    }
+
+    function safeTransferFrom(address token, address from, address to, uint value) internal {
+        // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(0x23b872dd, from, to, value));
+        if (success && data.length > 0) {}
+    }
+
+    function getBinderLength(address account) public view returns (uint256){
+        return _binder[account].length;
+    }
+
+
+    struct BurnInfo {
+        uint256 rewardBalance;
+        uint256 dailyRewardAmount;
+        uint256 startRewardTime;
+        uint256 totalAmount;
+        uint256 claimedReward;
+        uint256 inviteReward;
+    }
+
+    bool public _burnPause = true;
+    uint256 public _burnRewardRate = 15000;
+    uint256 public _burnReleaseTimes = 90 days;
+    uint256 public _burnInviteFee = 1000;
+    uint256 public _burnMinAmount;
+    uint256 public _burnTotal;
+    uint256 public _burnMax;
+
+    mapping(address => BurnInfo) public _burnInfo;
+
+    function burn(uint256 amount, address invitor) external {
+        require(!_burnPause, "pause");
+        require(amount >= _burnMinAmount, "min");
+        address account = msg.sender;
+        require(tx.origin == account, "EOA");
+        claimBurnReward(account);
+        _bindInvitor(account, invitor);
+        amount = _takeToken(_token, account, address(0xdead), amount);
+        _burnTotal += amount;
+        require(_burnMax >= _burnTotal, "maxBurn");
+
+        BurnInfo storage burnInfo = _burnInfo[account];
+        burnInfo.totalAmount += amount;
+
+        uint256 rewardBalance = burnInfo.rewardBalance;
+        uint256 rewardAmount = amount * _burnRewardRate / _divFactor;
+        rewardBalance += rewardAmount;
+        burnInfo.rewardBalance = rewardBalance;
+        burnInfo.startRewardTime = block.timestamp;
+        burnInfo.dailyRewardAmount = rewardBalance * _dailyDuration / _burnReleaseTimes;
+
+    }
+
+    function calPendingBurnReward(address account) public view returns (uint256){
+        BurnInfo storage burnInfo = _burnInfo[account];
+        uint256 rewardBalance = burnInfo.rewardBalance;
+        if (0 == rewardBalance) {
+            return 0;
+        }
+        uint256 startRewardTime = burnInfo.startRewardTime;
+        uint256 nowTime = block.timestamp;
+        if (0 == startRewardTime || startRewardTime >= nowTime) {
+            return 0;
+        }
+        uint256 rewardAmount = burnInfo.dailyRewardAmount * (nowTime - startRewardTime) / _dailyDuration;
+        if (rewardAmount > rewardBalance) {
+            rewardAmount = rewardBalance;
+        }
+        return rewardAmount;
+    }
+
+    function claimBurnReward(address account) public {
+        BurnInfo storage burnInfo = _burnInfo[account];
+        uint256 reward = calPendingBurnReward(account);
+        if (reward > 0) {
+            burnInfo.claimedReward += reward;
+            burnInfo.rewardBalance -= reward;
+            burnInfo.startRewardTime = block.timestamp;
+            address token = _token;
+            _giveToken(token, account, reward);
+
+            address invitor = _invitor[account];
+            if (address(0) == invitor) {
+                invitor = _defaultInvitor;
+                return;
+            }
+            uint256 inviteReward = reward * _burnInviteFee / 10000;
+            _giveToken(token, invitor, inviteReward);
+            _burnInfo[invitor].inviteReward += inviteReward;
+        }
+    }
+
+    function burnOpen() external onlyOwner {
+        _burnPause = false;
+    }
+
+    function burnClose() external onlyOwner {
+        _burnPause = true;
+    }
+
+    function setBurnMinAmount(uint256 m) external onlyOwner {
+        require(m > 0, "not 0");
+        _burnMinAmount = m;
+    }
+
+    function setBurnMax(uint256 m) external onlyOwner {
+        _burnMax = m;
+    }
+
+    function setBurnRewardRate(uint256 r) external onlyOwner {
+        _burnRewardRate = r;
+    }
+
+    function setBurnReleaseTimes(uint256 ts) external onlyOwner {
+        _burnReleaseTimes = ts;
+    }
+
+    function setBurnInvite(uint256 fee) external onlyOwner {
+        _burnInviteFee = fee;
+    }
+
+    function setBurnDailyRewardAmount(address account, uint256 amount) external onlyOwner {
+        _burnInfo[account].dailyRewardAmount = amount;
+    }
+
+    constructor(){
+        _swapRouter = ISwapRouter(address(0x10ED43C718714eb63d5aA57B78B54704E256024E));
+        _usdt = address(0x55d398326f99059fF775485246999027B3197955);
+        //XLoong
+        _token = address(0x2D63a55EA062d24c827be893D5BEB80B1E131688);
+        //Loong
+        _rewardToken = address(0xcCB8Ee0A0bd7A7bC9740c2C5F903539182831688);
+        _defaultInvitor = address(0x1310787a845bdA72335E2684cA4479e333175DcC);
+        _fundAddress = address(0xE0C430F763E2e68B6AFECfB0E81286702AD55B11);
+        _nft = INFT(address(0xC32e809384D662F9d397f05E28ba0737282302eF));
+
+        _weth = _swapRouter.WETH();
+        IERC20(_weth).approve(address(_swapRouter), ~uint256(0));
+        IERC20(_usdt).approve(address(_swapRouter), ~uint256(0));
+        IERC20(_rewardToken).approve(address(_swapRouter), ~uint256(0));
+
+        poolInfo.lastRewardBlock = block.number;
+        uint256 tokenUnit = 10 ** IERC20(_token).decimals();
+        poolInfo.totalReward = 5000000 * tokenUnit;
+        poolInfo.rewardPerBlock = 5000 * tokenUnit / _dayBlocks;
+
+        uint256 rewardUnit = 10 ** IERC20(_rewardToken).decimals();
+        poolInfo.totalReward2 = 2000 * rewardUnit;
+        poolInfo.rewardPerBlock2 = 5 * rewardUnit / _dayBlocks;
+
+        uint256 usdtUnit = 10 ** IERC20(_usdt).decimals();
+        _minUsdt = 100 * usdtUnit;
+        _active[_defaultInvitor] = true;
+        _nftUsdt = 500 * usdtUnit;
+        _nftInviteUsdt = 6000 * usdtUnit;
+
+        _burnMinAmount = 100 * tokenUnit;
+        _burnMax = 6660000 * tokenUnit;
+    }
+}

@@ -1,0 +1,862 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.26;
+
+interface IEERC314 {
+  event Transfer(address indexed from, address indexed to, uint256 value);
+  event AddLiquidity(uint32 _blockToUnlockLiquidity, uint256 value);
+  event RemoveLiquidity(uint256 value);
+  event Swap(address indexed sender, uint amount0In, uint amount1In, uint amount0Out, uint amount1Out);
+}
+
+contract MyExternalContract {
+    function getrefMap(address adr) public view returns (address payable,uint256,uint256,uint256,uint256,uint256,uint256){
+
+    }
+}
+
+
+abstract contract ERC314 is IEERC314 {
+    mapping(address => uint256) private _balances;  
+    mapping(address => uint256) private _lastTxTime; 
+    mapping(address => uint32) private lastTransaction; 
+    mapping(address => uint) private neMintList; 
+    mapping(address => uint) public mintWhiteList; 
+    mapping(address => uint) public qzWhiteList; 
+
+    mapping (address => uint256) public  mintAmount; 
+    mapping (address => uint256) public  mintAmount0; 
+
+    mapping (address => uint256) public deadAmountMap; 
+    mapping (address => address payable) public refMap; 
+    mapping (address => uint256) private refCount; 
+    mapping (address => uint256) private refCountALL; 
+    mapping (address => uint256) private refAmountALL;
+    mapping (address => address []) public childAddresses; 
+
+    uint256 public _totalSupply; 
+    uint256 private deadAmount;
+    uint256 private deadCount; 
+    uint256 private transferAmount1; 
+    uint256 private transferAmount2;
+    uint256 private totalAllDividAmount; 
+
+    uint256 public blockToUnlockLiquidity;  
+    uint256 private feeTimes = 107; 
+    uint256 private _destoryFee = 200; 
+    uint256 public waitSeconds = 5; 
+    uint256 private openTradeTime; 
+    uint256 private bnbRate1 = 10; 
+
+    uint256 private oneAddressMaxToken = 100000 ether; 
+    uint256 private whiteTokenCount = 1050 ether; 
+
+    address [] public nodeAddresses; //节点地址
+    mapping (address => uint256) public nodeAddresseMap; 
+    mapping (address => uint256) public nodeIncomeMap;
+    mapping (address => uint256) public burnIncomeMap; 
+    mapping (address => uint256) public refIncomeMap; 
+    mapping (address => uint256) public waitGetBnb;  
+    mapping (address => uint256) public waitGetBurnBnb;  
+    mapping (address => uint256) public waitGetBnbS; 
+    mapping (address => uint256) public burnCountMap; 
+    
+    uint256 [] private bra = [4,2,2,68,24,0]; 
+
+    uint256 public totalBurnCount =0;  
+    uint256 public totalBurnCounted =0; 
+    uint256 private totalBurnBnb =0;  
+    uint256 private needCheckFlag =1; 
+    mapping (address => uint256) public burnAmountR; 
+    mapping (address => uint256) public dividAmountMap; 
+    mapping (address => uint256) public readyAmountS; 
+    mapping (address => uint256) public readyAmountS0; 
+    mapping (uint256 => uint256) public blockPrice; 
+    uint256 public dividAmountS = 0; 
+    uint256 public dividAmount = 0; 
+    address private pairAddress ; 
+    address private usdtPairAddress ;
+
+    address [] public  allUsersV; 
+    address [] public  allMintUsers; 
+    address [] public  allMintUsers2; 
+
+    //分红需要的参数
+    mapping (address => uint256) public lastBurnTime;  
+    mapping (address => uint256 []) public burnBnbList; 
+    mapping (address => uint256 []) public burnTimeList; 
+    
+    uint256 addLpTime = 0; 
+
+    string private _name; 
+    string private _symbol; 
+
+    uint256 private _mintMin = 0.1 ether; 
+    uint256 private _mintMax = 0.2 ether; 
+    address private yxAddress =0xeBDe495F9AEda392Af1e49DD7fCB26Bcb4c05B6B; 
+    address private startAddress =0xa845482ef4C41278373B724A4956afBC4524b47b; 
+    address private ownerAddress =0xbd5ED916B38A96414DF23f8A811fba709436D73c; 
+    address private manageAddress =0xB000f986B0172776Fd40Dbf50aC98A58fa3CDcDb; 
+    address public feeAddress =address(0x0000000000000000000000000000000000000002); 
+    address private serverContract ; 
+    address private serverAddress ; 
+    address private feeAddress2;  
+    uint256 private mintBNBS = 500 ether; 
+    uint256 private nodeNeedAmount = 10 ether; 
+    uint256 private dividSeconds = 604800;  
+    uint256 private stayBnbMax = 31.8 ether; 
+    uint256 private burnSeconds  = 1800; 
+    uint256 private burnMinBnb = 0.1 ether; 
+    uint256 private burnMaxBnb = 10 ether;  
+    uint256 private waitSecondsS = 10; 
+    uint256 private maxBurnCountDay = 2000; 
+    uint256 private waitBurnSeconds = 86400; 
+    uint256 private _price0 = 4200 ether;
+    uint256 private _mintMin0 = 0.3 ether; 
+    uint256 private mintBNBS0 = 150 ether; 
+    uint256 private _totalSupplyKc = 9200000 ether; 
+    uint256 private _totalSupplyLong = 5300000 ether; 
+    uint256 private _totalSupplyPank = 6500000 ether; 
+    uint256 [] public blockPriceList = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]; 
+    address private externalContract = 0x1a1F03eCA72e3e7dD15419e4e502D52F926c4e8B;
+
+    uint256 private lastDividTimestamp;  
+
+    mapping(address => mapping(address => uint256)) private _allowances;
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+
+    address public owner; 
+    address public liquidityProvider; 
+    uint256 public mintEnable = 0; 
+    bool public liquidityAdded;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Ownable: caller is not the owner");
+        _;
+    }
+    modifier onlyLiquidityProvider() {
+        require(msg.sender == liquidityProvider,"You are not the liquidity provider");
+        _;
+    }
+    modifier onlyExternalContract() {
+        require(msg.sender == serverContract, "Only the external contract can call this function");
+        _;
+    }
+
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint256 totalSupply_
+    ) {
+        _name = name_;
+        _symbol = symbol_;
+        _totalSupply = totalSupply_;
+
+        address receiver = ownerAddress; 
+        owner = receiver;
+
+        blockToUnlockLiquidity = block.number;  
+        lastDividTimestamp = block.timestamp;
+        liquidityProvider = receiver;  
+
+        mintWhiteList[ownerAddress] =1;
+        mintWhiteList[startAddress] =1;
+        qzWhiteList[ownerAddress] = 1;
+        qzWhiteList[startAddress] = 1;
+        neMintList[ownerAddress] = 1;
+        neMintList[startAddress] = 1;
+
+        _balances[address(this)] = totalSupply_; 
+
+        childAddresses[ownerAddress].push(ownerAddress);
+    }
+
+
+    function updateParam(uint256 _type,uint256 _value,address _valueAdr) public onlyOwner{
+        if(_type == 0){ 
+            startAddress = _valueAdr;
+            qzWhiteList[startAddress] =1;
+            neMintList[startAddress] =1;
+        }else if(_type==1){ 
+            waitSeconds = _value;
+        }else if(_type==2){ 
+            pairAddress = _valueAdr;
+        }else if(_type==3){ 
+            mintEnable = _value;
+            if(mintEnable==5){
+                openTradeTime = block.timestamp;
+                if(addLpTime==0)addLpTime =  block.timestamp;
+            }else if(mintEnable==3){ 
+                if(deadAmount==0){
+                    _transfer(address(this), ownerAddress, _totalSupplyPank+_totalSupplyLong); 
+                    
+                    _transfer(address(this), feeAddress, _totalSupplyKc);  
+                }
+            }else if(mintEnable==4){ 
+                if(!liquidityAdded){
+
+                    liquidityAdded = true;
+                    liquidityProvider = msg.sender;
+                    emit AddLiquidity(uint32(block.number), address(this).balance);
+                }
+            }
+        }else if(_type==4){ 
+            feeAddress =  _valueAdr;
+        }else if(_type==5){
+            usdtPairAddress = _valueAdr;
+        }else if(_type==6){
+            burnSeconds = _value;
+        }else if(_type==7){
+            dividSeconds = _value;
+        }else if(_type==8){
+            waitSecondsS = _value;
+        }else if (_type ==9){
+            addLpTime = _value;
+        }else if (_type ==10){
+            blockToUnlockLiquidity = _value;
+        }else if (_type ==11){
+            burnMinBnb = _value;
+        }else if (_type ==12){
+            burnMaxBnb = _value;
+        }else if (_type ==13){
+            nodeNeedAmount = _value;
+        }else if(_type==14){
+            mintBNBS0 = _value;
+        }else if(_type==15){
+            mintBNBS = _value;
+        }
+    }
+
+    function updateServerContract(address _valueAdr) public{
+        if(serverContract==address(0)){
+            serverContract = _valueAdr;
+        }
+    }
+
+    function updateParam2(uint256 _type,uint256 _value,address _valueAdr)  external onlyExternalContract  {
+        if(_type == 0){ //修改燃烧间隔
+            waitBurnSeconds = _value;
+        }else if(_type==1){ 
+            totalBurnCounted = _value;
+        }else if(_type==2){ 
+            usdtPairAddress = _valueAdr;
+        }else if(_type==3){ 
+            pairAddress = _valueAdr;
+        }else if(_type==4){ 
+            maxBurnCountDay = _value;
+        }else if(_type==5){
+            needCheckFlag =  _value;
+        }else if(_type==6){
+             waitSecondsS = _value;
+        }else if(_type==7){
+             bra[5] = _value;
+        }else if (_type==8){
+            feeAddress2=_valueAdr;
+        }else if (_type==9){
+            serverAddress = _valueAdr;
+        }
+    }
+
+   
+    function getStatData() public view virtual returns (uint256 ,uint256 ,uint256 ,uint256 ,uint256  ,uint256 ,uint256 
+    ,uint256,uint256,uint256,uint256 ) {
+        return (totalBurnCounted,dividAmountS,dividAmount,maxBurnCountDay,totalBurnCounted,0,0,0 
+        ,mintEnable,allUsersV.length,stayBnbMax);
+    }
+    function getStatData2() public view virtual returns (uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256 ) {
+        return (_balances[address(this)],address(this).balance,lastDividTimestamp,_totalSupply,deadAmount,0,transferAmount2,totalAllDividAmount,deadCount);
+    }
+    function getStatData3() public view virtual returns (address,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256) {
+        return (address(this),address(this),address(this),_destoryFee,feeTimes,totalBurnBnb,burnMinBnb,burnMaxBnb,totalBurnCount,0);
+    }
+    
+    function getParam() public view virtual returns (uint256,uint256,uint256,address,address,uint256,uint256,uint256,uint256,uint256) {
+        return (_price0,_mintMin,_mintMax,ownerAddress,startAddress,mintBNBS0,mintBNBS,0,0,dividSeconds);
+    }
+    
+    function getrefMap(address adr) public view virtual returns (address payable,uint256,uint256,uint256,uint256,uint256,uint256) {
+        return (refMap[adr],refCount[adr],refCountALL[adr],nodeAddresseMap[adr],mintAmount[adr],waitGetBurnBnb[adr], 0);
+    }
+    function getrefMap2(address adr) public view virtual returns (uint256,uint256,uint256,uint256,uint256,uint256,uint256) {
+        return (nodeIncomeMap[adr],mintWhiteList[adr],deadAmountMap[adr],allMintUsers.length,allMintUsers2.length,mintAmount0[adr],burnIncomeMap[adr]);
+    }
+    function getrefMap3(address adr) public view virtual returns (uint256,uint256,uint256,uint256,uint256,uint256,uint256) {
+        return (waitGetBnb[adr],waitGetBnbS[adr],qzWhiteList[adr],waitGetBnb[adr],refIncomeMap[adr],burnCountMap[adr],refAmountALL[adr]);
+    }
+
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view virtual returns (uint8) {
+        return 18;
+    }
+
+    function totalSupply() public view virtual returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view virtual returns (uint256) {
+        return _balances[account];
+    }
+
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        // sell or transfer
+        if (to == address(this)&&msg.sender!=ownerAddress) {
+            sell(msg.sender, value);
+        } else {
+            _transfer(msg.sender, to, value);
+        }
+        return true;
+    }
+
+    function _approve(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(_owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[_owner][spender] = amount;
+        emit Approval(_owner, spender, amount);
+    }
+
+    function _spendAllowance(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        uint256 currentAllowance = allowance(_owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
+            unchecked {
+                _approve(_owner, spender, currentAllowance - amount);
+            }
+        }
+    }
+
+    function allowance(address _owner, address spender)
+        public
+        view
+        virtual
+        returns (uint256)
+    {
+        return _allowances[_owner][spender];
+    }
+
+    
+    function approve(address spender, uint256 amount)
+        public
+        virtual
+        returns (bool)
+    {
+        address _owner = msg.sender;
+        _approve(_owner, spender, amount);
+        return true;
+    }
+
+    function band(address payable parent) public{
+        require(refMap[msg.sender] == address(0),"banded");   
+        require(parent != msg.sender,"band error"); 
+        require(parent == startAddress||refMap[parent]!=address(0),"band error"); 
+
+        if(mintEnable<4){
+            require(qzWhiteList[parent]>0||mintWhiteList[parent]>0||neMintList[parent]>0 ,"not white list"); 
+            require(qzWhiteList[msg.sender]>0||mintWhiteList[msg.sender]>0||neMintList[msg.sender]>0 ,"not white list");  //自己要在白名单
+        }
+        
+        refMap[msg.sender] = parent;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address spender = msg.sender;
+        _spendAllowance(from, spender, amount);
+
+        if (to == address(this)) {
+            sell(from, amount);
+        } else {
+            _transfer(from, to, amount);
+        }
+        return true;
+    }
+
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual {
+        if(from != ownerAddress && to!=ownerAddress && to!=feeAddress&& from!=feeAddress&&to!=address(0)
+        &&to!=startAddress){
+            if (to == address(this) ||(pairAddress!=address(0) && to == pairAddress)) { 
+                require(lastTransaction[from] != block.number,"You can't make two transactions in the same block");
+                lastTransaction[from] = uint32(block.number);
+
+                require(block.timestamp >= (_lastTxTime[from] + waitSeconds),"Sender must wait for cooldown");
+                _lastTxTime[from] = block.timestamp;
+            }else if(from == address(this) ||(pairAddress!=address(0) && from == pairAddress)){ 
+                require(lastTransaction[to] != block.number,"You can't make two transactions in the same block");
+                lastTransaction[to] = uint32(block.number);
+
+                require(block.timestamp >= (_lastTxTime[to] + waitSeconds),"Sender must wait for cooldown");
+                _lastTxTime[to] = block.timestamp;
+            }
+        }
+        
+
+        require(_balances[from] >= value,"ERC20: transfer amount exceeds balance:");
+
+        unchecked {
+            _balances[from] = _balances[from] - value;
+        }
+
+        if (to == address(0)) {
+            unchecked {
+                _totalSupply -= value;
+            }
+            emit Transfer(from, to, value);
+        } else {
+            if(mintEnable!=5&&mintEnable!=6){  
+                if(from != ownerAddress && to!=ownerAddress && to!=feeAddress&& from!=feeAddress){ 
+                    require((qzWhiteList[to]>0||mintWhiteList[to]>0||neMintList[to]>0)&&mintEnable==4,'no start');
+                    if(qzWhiteList[to]>0){  
+                        require(readyAmountS0[to] > 0, "only minter"); 
+                        require(value <= readyAmountS0[to], "Max mint amount"); 
+                        //require(from == address(this), "must this contract");  
+                        require(from == pairAddress, "must pancake");  
+                        readyAmountS0[to] = readyAmountS0[to] - value;
+                    }else if(mintWhiteList[to]>0){ 
+                        require(readyAmountS[to] > 0, "only minter"); 
+                        require(value <= readyAmountS[to], "Max mint amount"); 
+                        require(from == pairAddress, "must pancake");  
+                        readyAmountS[to] = readyAmountS[to] - value;
+                    }
+                }
+            }else if(mintEnable==6){
+                require(neMintList[to]>0||to ==feeAddress,"no start");
+            }else{ 
+                require(to == address(this) || to == ownerAddress || to ==yxAddress || to ==startAddress|| to ==feeAddress|| to ==pairAddress||to==usdtPairAddress ||(value + _balances[to]) <= oneAddressMaxToken, "Max wallet amount"); //最多21W
+                if(blockPrice[block.number]==0){
+                    for(uint256 i =0;i<blockPriceList.length-1;i++){
+                        blockPriceList[i]= blockPriceList[i+1];
+                    }
+                    blockPriceList[blockPriceList.length-1]= _balances[address(this)] /address(this).balance;
+                    blockPrice[block.number] = 1;
+                }
+            }
+            
+            if((pairAddress!=address(0)&&(from== pairAddress || to ==pairAddress))||(usdtPairAddress!=address(0)&&(from== usdtPairAddress || to ==usdtPairAddress))){ 
+                uint256 fee= (value * _destoryFee)/10000;
+                transferAmount2 = transferAmount2 + value;
+                dividAmountS = dividAmountS + fee;
+                unchecked {
+                    _balances[to] += (value-fee);
+                }
+                emit Transfer(from, to, value-fee);
+                unchecked {
+                     _balances[feeAddress] += fee;
+                }
+                emit Transfer(from, feeAddress, fee);
+            }else{
+                unchecked {
+                    _balances[to] += value;
+                }
+                emit Transfer(from, to, value);
+            }
+        }
+    }
+
+    function _transferSimple(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual {
+        require(_balances[from] >= value,"ERC20: transfer amount exceeds balance:");
+        unchecked {
+            _balances[from] = _balances[from] - value;
+        }
+
+        if (to == address(0)) {
+            unchecked {
+                _totalSupply -= value;
+            }
+            emit Transfer(from, to, value);
+        } else {
+            unchecked {
+                _balances[to] += value;
+            }
+            emit Transfer(from, to, value);
+        }
+    }
+
+    function getReserves() public view returns (uint256, uint256) {
+        return (address(this).balance, _balances[address(this)]);
+    }
+
+    function addLiquidity(uint32 _blockToUnlockLiquidity) public onlyOwner {
+        require(liquidityAdded == false, 'Liquidity already added');
+
+        liquidityAdded = true;
+
+        require(block.number < _blockToUnlockLiquidity, 'Block number too low');
+
+        blockToUnlockLiquidity = _blockToUnlockLiquidity;
+        mintEnable = 4; 
+        liquidityProvider = msg.sender;
+
+        emit AddLiquidity(_blockToUnlockLiquidity, address(this).balance);
+  }
+
+  function removeLiquidity() public onlyLiquidityProvider {
+    require(block.number > blockToUnlockLiquidity, 'Liquidity locked');
+
+    payable(msg.sender).transfer(address(this).balance);
+
+    emit RemoveLiquidity(address(this).balance);
+  }
+
+    function extendLiquidityLock(uint32 _blockToUnlockLiquidity)
+        public
+        onlyLiquidityProvider
+    {
+        require(
+            blockToUnlockLiquidity < _blockToUnlockLiquidity,
+            "You can't shorten duration"
+        );
+
+        blockToUnlockLiquidity = _blockToUnlockLiquidity;
+    }
+
+
+    function addMintWhite(uint _type,address[] memory addresses,uint result) public onlyOwner{
+        if(_type==0){
+            for(uint i =0;i < addresses.length; i ++){
+                neMintList[addresses[i]] = result;
+            }
+        }else if(_type==1){
+            for(uint i =0;i < addresses.length; i ++){
+                if(result==1&&mintWhiteList[addresses[i]]==1){  
+                    continue;
+                }
+                qzWhiteList[addresses[i]] = result;
+            }
+        }else if(_type==2){
+            for(uint i =0;i < addresses.length; i ++){
+                if(result==1&&qzWhiteList[addresses[i]]==1){  
+                    continue;
+                }
+                mintWhiteList[addresses[i]] = result;
+            }
+        }
+    }
+
+    function addMintUser(uint _type,address[] memory addresses) public onlyOwner{
+        // 定义外部合约的接口
+        MyExternalContract externalContractInstance = MyExternalContract(externalContract);
+        if(_type==0){
+            uint256 msgValue = 0.3 ether;
+            for(uint i =0;i < addresses.length; i ++){
+                mintAmount0[addresses[i]] = mintAmount0[addresses[i]] + msgValue; 
+                readyAmountS0[addresses[i]] = _price0 ;
+                allMintUsers2.push(addresses[i]);
+                qzWhiteList[addresses[i]] = 1;
+
+                (address payable v1,, , , , ,) = externalContractInstance.getrefMap(addresses[i]);
+                refMap[addresses[i]]=v1;
+                address payable parent = v1;
+                while(parent!=address(0)){
+                    (address payable v2,, , , , ,) = externalContractInstance.getrefMap(parent);
+                    refMap[parent]=v2;
+                    parent = v2;
+                }
+            }
+        }else if(_type==1||_type==2){
+            for(uint i =0;i < addresses.length; i ++){
+                uint256 msgValue;
+                if(_type==1){
+                    msgValue = 0.1 ether;
+                }else{
+                    msgValue = 0.2 ether;
+                }
+                mintAmount[addresses[i]] = mintAmount[addresses[i]] + msgValue; 
+                readyAmountS[addresses[i]] = (msgValue/_mintMin) * whiteTokenCount ;
+                allMintUsers.push(addresses[i]);
+                mintWhiteList[addresses[i]] = 1;
+
+                (address payable v1,, , , , ,) = externalContractInstance.getrefMap(addresses[i]);
+                refMap[addresses[i]]=v1;
+                address payable parent = v1;
+                while(parent!=address(0)){
+                    (address payable v2,, , , , ,) = externalContractInstance.getrefMap(parent);
+                    refMap[parent]=v2;
+                    parent = v2;
+                }
+            }
+        }
+    }
+
+    function renounceOwnership() public onlyOwner {  
+        owner = address(0);
+    }
+    function renounceLp() public onlyOwner {  
+        liquidityProvider = address(0);
+    }
+    function transferOwnership(address newOwner) public virtual onlyOwner {  
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        owner = newOwner;
+    }
+    function transferliquidityProvider(address newOwner) public virtual onlyLiquidityProvider { 
+        require(newOwner != address(0), "liquidityProvider: new owner is the zero address");
+        liquidityProvider = newOwner;
+    }
+
+    function getAmountOut(uint256 value, bool _buy)
+        public
+        view
+        returns (uint256)
+    {
+        (uint256 reserveETH, uint256 reserveToken) = getReserves();
+
+        if (_buy) { 
+            return (value * reserveToken) / (reserveETH + value);
+        } else { 
+            return (value * reserveETH) / (reserveToken + value);
+        }
+    }
+
+    function buy(uint256 swapValue) internal {
+        require(mintEnable==4 || mintEnable==5|| mintEnable==6,"!transfer no start");  
+
+        uint256 token_amount = ((swapValue) * _balances[address(this)]) /(address(this).balance); 
+        uint256 realAmount = (token_amount * (10000 - _destoryFee))/10000;
+
+        transferAmount1 = transferAmount1 + token_amount;
+        
+        _transfer(address(this), address(msg.sender),realAmount); 
+
+        uint256 fee = token_amount - realAmount; 
+        _transfer(address(this), feeAddress, fee); 
+        //_balances[address(this)] = _balances[address(this)] - fee; 
+        dividAmountS = dividAmountS + fee;
+
+        emit Swap(msg.sender, swapValue, 0, 0, token_amount);
+
+    }
+
+    function burn(uint256 value) public virtual returns (bool) {
+        require(mintEnable == 5,"not start burn");
+        //require(maxBurnCountDay > totalBurnCounted ,"no total count");
+        uint256 currentTime = block.timestamp; 
+        require((currentTime - addLpTime) >= burnSeconds , "must after addlpTime");
+        require((currentTime- lastBurnTime[msg.sender]) >= waitBurnSeconds,"your burn time error");
+        uint256 price =_balances[address(this)] /address(this).balance; 
+        uint256 msgValue = value / price;  
+        
+        require(msgValue>= burnMinBnb && msgValue <= burnMaxBnb,"burn amount error"); 
+
+        require(refMap[msg.sender] != address(0),"no band");
+        require(checkPrice(),"price error");
+        
+        uint256 burn_amount = (value * bra[4])/100;
+        if(burn_amount>0){
+            _transferSimple(msg.sender, address(0), burn_amount);  
+        }
+
+        _transferSimple(msg.sender, feeAddress,value-burn_amount); 
+        if((value * bra[2])>0){
+            _transferSimple(feeAddress, yxAddress, (value * bra[2])/100); 
+        }
+        if((value * bra[5])>0){
+            _transferSimple(feeAddress2, serverAddress, (value * bra[5])/100); 
+        }
+        
+        deadAmount = deadAmount+burn_amount;
+        deadCount = deadCount+1;
+        burnCountMap[msg.sender] = burnCountMap[msg.sender] +1;
+        deadAmountMap[msg.sender] = deadAmountMap[msg.sender]+burn_amount;
+
+        uint256 giveNodeAmount = (value * bra[1])/100 ;
+
+        totalAllDividAmount = totalAllDividAmount+(value-burn_amount); 
+        address account = address(msg.sender);
+
+        if(burnAmountR[account] == 0){ 
+            allUsersV.push(account);
+        }
+
+        address parent = refMap[msg.sender];
+        if(parent != address(0)){
+            //first burn
+            if(burnAmountR[account] == 0){
+                childAddresses[parent].push(account);
+
+                refCount[parent] = refCount[parent] + 1; 
+                //refCountALL[parent] = refCountALL[parent] + 1; 
+                refAmountALL[parent] = refAmountALL[parent] + msgValue;
+
+                if(nodeAddresseMap[parent] == 0 && refAmountALL[parent] >= nodeNeedAmount&& burnAmountR[parent]>0){
+                    nodeAddresses.push(parent);
+                    nodeAddresseMap[parent] = 1;
+                }
+            }
+
+            //if(burnAmountR[parent] >0&&dayBurnWaitAmount[parent]>0){ 
+            if(burnAmountR[parent] >0&&waitGetBurnBnb[parent]>0){ 
+                _transferSimple(feeAddress, parent, (value * bra[0])/100); 
+                refIncomeMap[parent] = refIncomeMap[parent] + (value * bra[0])/100;
+            }else{
+                _transferSimple(feeAddress, startAddress, (value * bra[0])/100);   
+                refIncomeMap[startAddress] = refIncomeMap[startAddress] + (value * bra[0])/100;
+            }
+
+            if(burnAmountR[account] == 0){ 
+                uint whileIndex = 2;
+                address parent4 = refMap[parent];
+                while(whileIndex <= 5 && parent4!=address(0)){
+                    //refCountALL[parent4] = refCountALL[parent4] + 1;
+                    refAmountALL[parent4] = refAmountALL[parent4] + msgValue;
+                    if(nodeAddresseMap[parent4] == 0 && refAmountALL[parent4] >= nodeNeedAmount&& burnAmountR[parent4]>0){ 
+                        nodeAddresses.push(parent4);
+                        nodeAddresseMap[parent4] = 1;
+                    }
+
+                    parent4 = refMap[parent4];
+                    whileIndex ++;
+                }
+            }
+
+            address parent3 = parent;
+            while(parent3!=address(0)){
+                //if(nodeAddresseMap[parent3]>0 && giveNodeAmount>0&&dayBurnWaitAmount[parent3]>0){ 
+                if(nodeAddresseMap[parent3]>0 && giveNodeAmount>0){ 
+                    if(waitGetBurnBnb[parent3]>0){
+                        _transferSimple(feeAddress, parent3, giveNodeAmount);
+                        nodeIncomeMap[parent3] = nodeIncomeMap[parent3] +  giveNodeAmount;
+                        giveNodeAmount = 0;
+                    }
+                    break;   
+                }
+
+                parent3 = refMap[parent3];
+            }
+        }
+        if(giveNodeAmount>0){ 
+            _transferSimple(feeAddress, startAddress, giveNodeAmount);
+            nodeIncomeMap[startAddress] = nodeIncomeMap[startAddress] +  giveNodeAmount;
+        }
+        uint256 waitDividBnb = (msgValue * feeTimes)/100; 
+        burnAmountR[account] = burnAmountR[account] + value ; 
+        totalBurnCounted = totalBurnCounted + 1;  
+        totalBurnCount = totalBurnCount + 1; 
+        lastBurnTime[msg.sender] = block.timestamp;
+
+        burnBnbList[msg.sender].push(waitDividBnb);
+        burnTimeList[msg.sender].push(block.timestamp);        
+        totalBurnBnb = totalBurnBnb + waitDividBnb;
+        waitGetBurnBnb[msg.sender] = waitGetBurnBnb[msg.sender]+waitDividBnb;
+        return true;
+    }
+
+    function checkPrice() internal virtual returns (bool) {
+        if(needCheckFlag==0){
+            return true;
+        }
+        uint256 totalPrice = 0;
+        uint256 price =_balances[address(this)] /address(this).balance; 
+        for(uint256 i = 0;i<blockPriceList.length;i++){
+            totalPrice = totalPrice +blockPriceList[i];
+        }
+        uint256 avgPrice = (totalPrice*100)/blockPriceList.length;
+        uint256 price2 = price * 100;
+        if(avgPrice > price2){
+            return ((avgPrice*100)/price2)<130;
+            
+        }else if(price2>avgPrice){
+            
+            return ((price2*100)/avgPrice)<130;
+            
+        }
+        return true;
+    }
+
+    
+    function dividMe() public virtual returns (bool) {
+        address adr = msg.sender;
+        uint256 price = (_balances[address(this)] /address(this).balance); 
+        require(checkPrice(),"price error"); 
+        for(uint256 i = 0 ; i<burnBnbList[adr].length;i++){
+            if(burnBnbList[adr][i]>0 && (block.timestamp-burnTimeList[adr][i])>dividSeconds){
+                _transferSimple(feeAddress, adr, burnBnbList[adr][i]*price);            
+                burnIncomeMap[adr] = burnIncomeMap[adr]+burnBnbList[adr][i]; 
+                if(waitGetBurnBnb[adr]>burnBnbList[adr][i]){
+                    waitGetBurnBnb[adr] = waitGetBurnBnb[adr]-burnBnbList[adr][i]; 
+                }else{
+                    waitGetBurnBnb[adr] = 0;
+                }
+                burnBnbList[adr][i] = 0;
+            }
+        }
+        
+        return true;
+    }
+
+    function clearOutUser() public virtual returns (bool) {
+        delete burnBnbList[msg.sender];
+        delete burnTimeList[msg.sender];
+        return true;
+    }
+
+    function sell(address _owner, uint256 sell_amount) internal {
+        require(mintEnable==5||mintEnable==6,"transfer no start!");  
+        uint256 fee_amount = sell_amount * _destoryFee /10000;  
+        uint256 real_amount = sell_amount-fee_amount; 
+        transferAmount1 = transferAmount1+sell_amount;
+        
+        dividAmountS = dividAmountS + fee_amount;
+
+        uint256 getBnbAmonut = (real_amount * address(this).balance) /
+            (_balances[address(this)] + real_amount);
+
+        require(getBnbAmonut > 0, "Sell amount too low");
+        require(address(this).balance >= getBnbAmonut,"Insufficient ETH in reserves");
+
+        _transfer(_owner, address(this), real_amount);
+        _transfer(_owner, feeAddress, fee_amount); 
+
+        payable(_owner).transfer(getBnbAmonut);
+
+        emit Swap(_owner, 0, sell_amount, getBnbAmonut , 0);
+    }
+
+    receive() external payable {
+        address account = msg.sender;
+        if (account != tx.origin) { 
+            return;
+        }
+        if(account != ownerAddress ){ 
+            if(mintEnable > 3){  
+                buy(msg.value);
+            }
+        }
+    }
+
+}
+
+contract BNBPMMM is ERC314 {
+    constructor() ERC314("PMM", "PMM", 21000000 * 10**18) {}
+}

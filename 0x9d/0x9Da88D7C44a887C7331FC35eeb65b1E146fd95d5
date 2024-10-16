@@ -1,0 +1,12 @@
+
+// File: src/QorpoAneemateAccess.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract QorpoAneemateAccess {
+    event AccessRequested(address indexed account);
+
+    function requestAccess() public {
+        emit AccessRequested(msg.sender);
+    }
+}

@@ -1,0 +1,354 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.19;
+
+interface IEERC314 {
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Swap(
+        address indexed sender,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out
+    );
+}
+
+abstract contract ERC314 is IEERC314 {
+    mapping(address => uint256) private _balances;
+    mapping(address => uint256) private _lastTxTime;
+    mapping(address => uint32) private lastTransaction;
+    mapping(address => bool) public _feeWhiteList;
+
+
+    uint256 private _totalSupply;
+    uint256 public blockToUnlockLiquidity;
+
+    string private _name;
+    string private _symbol;
+
+    mapping(address => mapping(address => uint256)) private _allowances;
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+
+    address public owner;
+    address public liquidityProvider;
+    uint256 public startBlock;
+    
+
+    uint256 public _buyfee;
+    uint256 public _sellfee;
+    uint256 public _buyDestroy;
+    uint256 public _sellDestroy;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Ownable: caller is not the owner");
+        _;
+    }
+    modifier onlyLiquidityProvider() {
+        require(
+            msg.sender == liquidityProvider,
+            "You are not the liquidity provider"
+        );
+        _;
+    }
+
+    function tradingEnable() public view returns (bool) {
+        return (block.number > startBlock && startBlock != 0) || _feeWhiteList[msg.sender];
+    }
+
+    address payable public feeReceiver;
+
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint256 totalSupply_
+    ) {
+        _name = name_;
+        _symbol = symbol_;
+        _totalSupply = totalSupply_;
+
+        address receiver = 0x3d2c6bab9EdE48b6aEe66Ed1E73387C0BD961029;
+        feeReceiver = payable(receiver);
+        owner = msg.sender;
+        _buyfee = 100;
+        _sellfee = 100;
+        _buyDestroy=100;
+        _sellDestroy=100;
+        
+        blockToUnlockLiquidity = block.number;
+        liquidityProvider = msg.sender;
+
+        _balances[address(this)] = _totalSupply;
+        emit Transfer(address(0), address(this), _totalSupply);
+    }
+
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view virtual returns (uint8) {
+        return 18;
+    }
+
+    function totalSupply() public view virtual returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view virtual returns (uint256) {
+        return _balances[account];
+    }
+
+    function setFeeReceiver(address marketaddress)public onlyLiquidityProvider {
+        feeReceiver=payable (marketaddress);
+    }
+
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        // sell or transfer
+        if (to == address(this)) {
+            sell(msg.sender, value);
+        } else {
+            _transfer(msg.sender, to, value);
+        }
+        return true;
+    }
+
+    function _approve(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(_owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        _allowances[_owner][spender] = amount;
+        emit Approval(_owner, spender, amount);
+    }
+
+    function _spendAllowance(
+        address _owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        uint256 currentAllowance = allowance(_owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(
+                currentAllowance >= amount,
+                "ERC20: insufficient allowance"
+            );
+            unchecked {
+                _approve(_owner, spender, currentAllowance - amount);
+            }
+        }
+    }
+
+    function allowance(address _owner, address spender)
+        public
+        view
+        virtual
+        returns (uint256)
+    {
+        return _allowances[_owner][spender];
+    }
+
+    function approve(address spender, uint256 amount)
+        public
+        virtual
+        returns (bool)
+    {
+        address _owner = msg.sender;
+        _approve(_owner, spender, amount);
+        return true;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public virtual returns (bool) {
+        address spender = msg.sender;
+        _spendAllowance(from, spender, amount);
+
+        if (to == address(this)) {
+            sell(from, amount);
+        } else {
+            _transfer(from, to, amount);
+        }
+        return true;
+    }
+
+
+    function _transfer(
+        address from,
+        address to,
+        uint256 value
+    ) internal virtual {
+        if (to == address(this)) {
+            require(
+                lastTransaction[msg.sender] != block.number,
+                "You can't make two transactions in the same block"
+            );
+            lastTransaction[msg.sender] = uint32(block.number);
+
+            require(
+                block.timestamp >= _lastTxTime[msg.sender] + 10,
+                "Sender must wait for cooldown"
+            );
+            _lastTxTime[msg.sender] = block.timestamp;
+        }
+
+        require(
+            _balances[from] >= value,
+            "ERC20: transfer amount exceeds balance"
+        );
+
+        unchecked {
+            _balances[from] = _balances[from] - value;
+        }
+
+        if (to == address(0)) {
+            unchecked {
+                _totalSupply -= value;
+            }
+        } else {
+            unchecked {
+                _balances[to] += value;
+            }
+        }
+
+        emit Transfer(from, to, value);
+    }
+
+    function getReserves() public view returns (uint256, uint256) {
+        return (address(this).balance, _balances[address(this)]);
+    }
+
+    function removeLiquidity() public onlyLiquidityProvider {
+        require(block.number > blockToUnlockLiquidity, "Liquidity locked");
+
+        startBlock = 0;
+
+        payable(msg.sender).transfer(address(this).balance);
+    }
+
+    function extendLiquidityLock(uint32 _blockToUnlockLiquidity)
+        public
+        onlyLiquidityProvider
+    {
+        require(
+            blockToUnlockLiquidity < _blockToUnlockLiquidity,
+            "You can't shorten duration"
+        );
+
+        blockToUnlockLiquidity = _blockToUnlockLiquidity;
+    }
+
+    function start(uint256 _startBlock) public onlyOwner {
+        startBlock = _startBlock;
+    }
+
+    function renounceOwnership() external onlyOwner {
+        owner = address(0);
+    }
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(newOwner != address(0), "Ownable: new owner is the zero address");
+        owner = newOwner;
+    }
+    function setFee(uint256 buyfee,uint256 sellfee ,uint256 buyDestroy,uint256 sellDestroy) public onlyOwner {
+        _buyfee = buyfee;
+        _sellfee = sellfee;
+        _buyDestroy=buyDestroy;
+        _sellDestroy=sellDestroy;
+    }
+    function setFeeWhiteList(address addr, bool enable) external onlyOwner {
+        _feeWhiteList[addr] = enable;
+    }
+
+    function batchSetFeeWhiteList(address[] memory addr, bool enable)
+        external
+        onlyOwner
+    {
+        for (uint256 i = 0; i < addr.length; i++) {
+            _feeWhiteList[addr[i]] = enable;
+        }
+    }
+    function getAmountOut(uint256 value, bool _buy)
+        public
+        view
+        returns (uint256)
+    {
+        (uint256 reserveETH, uint256 reserveToken) = getReserves();
+
+        if (_buy) {
+            return (value * reserveToken) / (reserveETH + value);
+        } else {
+            return (value * reserveETH) / (reserveToken + value);
+        }
+    }
+
+    function buy() internal {
+        require(tradingEnable(), "Trading not enable");
+
+        uint256 msgValue = msg.value;
+        uint256 buyfee;
+        uint256 buydestroy;
+        if(!_feeWhiteList[msg.sender]) { buyfee=_buyfee; buydestroy=_buyDestroy;}
+        uint256 feeValue = (msgValue * buyfee) / 10000;
+        uint256 swapValue = msgValue - feeValue;
+
+        if(feeValue>0) feeReceiver.transfer(feeValue);
+
+        uint256 token_amount = (swapValue * _balances[address(this)]) /
+            (address(this).balance);
+        uint256 burn_amount= token_amount*buydestroy/10000;
+        _transfer(address(this), msg.sender, token_amount);
+        if(burn_amount>0) _transfer(msg.sender, address(0xdead), burn_amount);
+
+        emit Swap(msg.sender, msgValue, 0, 0, token_amount);
+    }
+
+    function sell(address _owner, uint256 sell_amount) internal {
+        require(tradingEnable(), "Trading not enable");
+
+        uint256 sellfee;
+        uint256 selldestroy;
+        if(!_feeWhiteList[_owner]) { sellfee=_sellfee; selldestroy=_sellDestroy;}
+        uint256 burn_amount= sell_amount*selldestroy/10000;
+        uint256 swap_amount = sell_amount-burn_amount;
+        uint256 ethAmount = (swap_amount * address(this).balance) /
+            (_balances[address(this)] + swap_amount);
+
+        require(ethAmount > 0, "Sell amount too low");
+        require(
+            address(this).balance >= ethAmount,
+            "Insufficient ETH in reserves"
+        );
+
+        _transfer(_owner, address(this), swap_amount);
+        if(burn_amount>0) _transfer(_owner, address(0xdead), burn_amount);
+
+        uint256 feeValue = (ethAmount * sellfee) / 10000;
+        if(feeValue>0) payable(feeReceiver).transfer(feeValue);
+        payable(_owner).transfer(ethAmount - feeValue);
+
+        emit Swap(_owner, 0, sell_amount, ethAmount , 0);
+    }
+
+    receive() external payable {
+        address account = msg.sender;
+        if (account != tx.origin) {
+            return;
+        }
+        if (!tradingEnable()) return;
+        buy();
+    }
+}
+
+contract x314 is ERC314 {
+    constructor() ERC314("X314", "X314", 21000000 * 10**18) {}
+}

@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+interface IERC20 {
+    function transfer(address recipient, uint256 amount)
+        external
+        returns (bool);
+
+    function transferFrom(
+        address sender,
+        address recipient,
+        uint256 amount
+    ) external returns (bool);
+
+    function balanceOf(address account) external view returns (uint256);
+}
+
+contract SmartBC {
+    IERC20 public usdtToken;
+    address public owner;
+    uint256 public totalDeposit;
+    uint256 public totalWithdraw;
+    uint256 public transferToWithdrawContract;
+    uint256 public autoWithdrawPer;
+    address public withdrawContract;
+
+    mapping(address => uint256) public userBalances;
+
+    event OwnerChanged(address indexed previousOwner, address indexed newOwner);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Caller is not the owner");
+        _;
+    }
+
+    constructor(address _usdtTokenAddress, address _withdrawContract, uint256 _withdrawPercentage) {
+        usdtToken = IERC20(_usdtTokenAddress);
+        owner = msg.sender;
+        autoWithdrawPer = _withdrawPercentage;
+        withdrawContract = _withdrawContract;
+    }
+
+    function changeOwner(address newOwner) public onlyOwner {
+        require(newOwner != address(0), "New owner is the zero address");
+        emit OwnerChanged(owner, newOwner);
+        owner = newOwner;
+    }
+
+    function setAutoWithdrawPer(uint256 withdrawPercentage) public onlyOwner{
+        autoWithdrawPer = withdrawPercentage;
+    }
+
+    function setWithdrawContract(address newWithdrawContract) public onlyOwner{
+        withdrawContract = newWithdrawContract;
+    }
+
+    function deposit(uint256 amount) public {
+        uint256 autoWithdrawAmount = (amount * autoWithdrawPer) / 100;
+
+        require(
+            usdtToken.transferFrom(
+                msg.sender,
+                address(this),
+                amount
+            ),
+            "Deposit failed"
+        );
+        
+        require(
+            usdtToken.transfer(
+                withdrawContract,
+                autoWithdrawAmount
+            ),
+            "Auto transfer to withdraw contract failed"
+        );
+
+        userBalances[msg.sender] += amount;
+        totalDeposit += amount;
+        totalWithdraw += autoWithdrawAmount;
+        transferToWithdrawContract += autoWithdrawAmount;
+    }
+
+    function transferToWithdraw(address toWithdrawCon, uint256 amount)
+        public
+        onlyOwner
+    {
+        require(
+            usdtToken.balanceOf(address(this)) >= amount,
+            "Insufficient contract balance"
+        );
+        require(usdtToken.transfer(toWithdrawCon, amount), "Withdraw failed");
+        totalWithdraw += amount;
+    }
+}

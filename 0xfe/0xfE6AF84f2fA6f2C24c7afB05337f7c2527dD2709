@@ -1,0 +1,12 @@
+
+// File: contracts/checkin/M3CheckIn.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.13;
+
+contract M3Checkin {
+    event Success(address indexed _newUser, uint256 _timeOfLastUpdate);
+    function checkIn() external {
+        emit Success(msg.sender, block.timestamp);
+    }
+}
+

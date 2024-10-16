@@ -1,0 +1,531 @@
+pragma solidity ^0.5.0;
+
+/*
+`-:-.   ,-;"`-:-.   ,-;"`-:-.   ,-;"`-:-.   ,-;"
+   `P`,'=/     `P`,'=/     `A`,'=/     `v`,'=/
+     E==/        E==/        U==/        1==/
+   ,=,-<=`.    ,=,-<=`.    ,=,-<=`.    ,=,-<=`.
+,-'-'   `-=_,-'-'   `-=_,-'-'   `-=_,-'-'   `-=_
+
+Pepeau smart contract
+Deflationary farmable token - new kind of tokenomics.
+10,000 PEPEAU tokens initial supply, and decreasing through burns on random taxes (3%/burn tx)
+Pepeau is deflationary, taxed only on sells, and provide passive rewards to holders, LP providers and buyers. Strong pumpementals.
+
+0% tax on pancakeswap buys (not taxed, buyers aren't penalized).
+A 3% random tax is applied on each sell (slippage tolerance range: 3-12%) and transfer, either:
+- 3% burn (the total supply will reduce from 10,000 to ~0: after each tx with burn tax, your tokens worth more).
+- 3% redistributed to current holders (proportionally to their holding shares - the more you hold, the more you get)
+- 3% redistributed to LP providers (proportionally to their holding shares - the more you have LPs, the more you get - make sure you hold at least 1 PEPEAU token with your LP to activate the passive rewards)
+- 3% redistributed to largest buyers per 24h (within 24h before tx, all the pancakeswap buyers receive a share - the more you buy comparing to other buyers (within 24h before your tx), the more you get)
+Extra 0.5% tax rewarding the developer
+
+Security aspects:
+- Once the ownership is renounced, no one can call the core contract functions (me neither).
+- The taxes are hardcoded in the contract, and can't be modified by a function: they will remain the same forever.
+- genesis LP (created when initial liquidity were provided) are burned the developer do not own any.
+- the contract were tested on BSC testnet to ensure that there is no flaws on execution.
+- this contract isn't deployed behind a proxy, and is thus not upgradeable: avoid any kind of code edits or code manipulation.
+- no shaddy function, no mint function, all the code is clear and public.
+
+Enjoy these unique tokenomics (baked from scratch), god bless it's bug-free.
+Now, let's skyrocket it, that code can make it happen.
+
+Given for humanity by humanity,
+Sincelery yours,
+Pepeau.
+
+https://pepeau.org
+https://x.com/meetpepeau
+https://t.me/enterpepeau
+*/
+
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address who) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function transfer(address to, uint256 value) external returns (bool);
+    function approve(address spender, uint256 value) external returns (bool);
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+interface ILPProvider {
+    function balanceOf(address account) external view returns (uint256);
+}
+
+library SafeMath {
+    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+        if (a == 0) {
+            return 0;
+        }
+        uint256 c = a * b;
+        assert(c / a == b);
+        return c;
+    }
+
+    function div(uint256 a, uint256 b) internal pure returns (uint256) {
+        assert(b > 0);
+        uint256 c = a / b;
+        return c;
+    }
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        assert(b <= a);
+        return a - b;
+    }
+
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 c = a + b;
+        assert(c >= a);
+        return c;
+    }
+}
+
+contract ERC20Detailed is IERC20 {
+    string private _name;
+    string private _symbol;
+    uint8 private _decimals;
+
+    constructor(string memory name, string memory symbol, uint8 decimals) public {
+        _name = name;
+        _symbol = symbol;
+        _decimals = decimals;
+    }
+
+    function name() public view returns(string memory) {
+        return _name;
+    }
+
+    function symbol() public view returns(string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view returns(uint8) {
+        return _decimals;
+    }
+}
+
+contract PEPEAU is ILPProvider, ERC20Detailed {
+    using SafeMath for uint256;
+
+    ILPProvider public lpProviderContract; // PEPEAU LP contract address
+
+    address private owner;
+    address[] private _holders;
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event DeveloperAddressSet(address indexed previousDeveloper, address indexed newDeveloper);
+	event LPProviderContractSet(address indexed previousLPProviderContract, address indexed newLPProviderContract);
+	event TaxApplied(address indexed from, address indexed to, uint256 value, string taxType);
+
+    mapping (address => uint256) private _balances;
+    mapping (address => mapping (address => uint256)) private _allowed;
+
+    // Store the number of tokens bought and the timestamp for each buy
+    mapping (address => uint256) private _tokensBought;
+    mapping (address => uint256) private _lastBuyTimestamp;
+
+    string constant tokenName = "Pepeau";
+    string constant tokenSymbol = "PEPEAU";
+    uint8  constant tokenDecimals = 18;
+    uint256 _totalSupply = 10000000000000000000000; // 10,000 PEPEAU total supply * 18 decimals
+    uint256 public basePercent = 100;
+    address public developerAddress;  // Address for the developer fee
+    address public burnAddress = 0x000000000000000000000000000000000000dEaD;
+    uint256 public topBuyersThreshold = 100000000; // Minimum buy of 1 token
+    uint256 private constant TIME_WINDOW = 86400; // 24 hours in seconds
+
+    constructor(address _developerAddress) public payable ERC20Detailed(tokenName, tokenSymbol, tokenDecimals) {
+        owner = msg.sender;
+        developerAddress = _developerAddress; // Set developer address
+        _issue(msg.sender, _totalSupply);
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Caller is not the contract owner");
+        _;
+    }
+
+    function setDeveloperAddress(address _developerAddress) external onlyOwner {
+        emit DeveloperAddressSet(developerAddress, _developerAddress);
+        developerAddress = _developerAddress;
+    }
+	
+	function setLPProviderContract(address _lpProviderContract) external onlyOwner {
+        lpProviderContract = ILPProvider(_lpProviderContract);
+        emit LPProviderContractSet(address(lpProviderContract), _lpProviderContract);
+    }
+
+    // Renounce the contract ownership, assigning it to 0, thus disabling any function requiring 'onlyOwner'
+    function renounceOwnership() public onlyOwner {
+        emit OwnershipTransferred(owner, address(0));
+        owner = address(0);
+    }
+
+    function totalSupply() public view returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address owner) public view returns (uint256) {
+        return _balances[owner];
+    }
+
+    function allowance(address owner, address spender) public view returns (uint256) {
+        return _allowed[owner][spender];
+    }
+
+    // Add a holder (if he's not one already) who has a balance > 0
+    function addHolder(address account) private {
+        if (_balances[account] > 0 && !_isHolder(account)) {
+            _holders.push(account); // Add the address to holders array
+        }
+    }
+
+    function removeHolder(address account) private {
+        for (uint256 i = 0; i < _holders.length; i++) {
+            if (_holders[i] == account) {
+                // Move the last element to 'i' index to balance the deletion
+                _holders[i] = _holders[_holders.length - 1];
+                _holders.pop(); // Delete the last element
+                break; // Exit the loop after finding and deleting the address
+            }
+        }
+    }
+
+    function _isHolder(address account) private view returns (bool) {
+        for (uint256 i = 0; i < _holders.length; i++) {
+            if (_holders[i] == account) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function transfer(address to, uint256 value) public returns (bool) {
+        address from = msg.sender;
+
+        require(value <= _balances[from], "Insufficient balance");
+
+        uint256 tokensToTransfer;
+        uint256 devFee = value.mul(5).div(1000); // Developer fee 0.5%, hardcoded
+        _balances[developerAddress] = _balances[developerAddress].add(devFee); // Developer fee transfer
+
+        if (from == address(lpProviderContract) || from == developerAddress) {
+            // Disable the random tax for buy orders, only allow the 0.5% dev fee
+            // Disable also for developer transfers, such as liquidity pool creation
+            tokensToTransfer = value.sub(devFee);
+            _tokensBought[to] = _tokensBought[to].add(tokensToTransfer);
+            _lastBuyTimestamp[to] = block.timestamp;
+
+            // Update balances
+            _balances[from] = _balances[from].sub(value);
+            _balances[to] = _balances[to].add(tokensToTransfer);
+
+            emit Transfer(from, to, tokensToTransfer);
+            emit Transfer(from, developerAddress, devFee);
+
+            if (to != address(lpProviderContract) && _balances[to] >= 1) {
+                addHolder(to);
+            }
+
+            if (_balances[from] == 0) {
+                removeHolder(from);
+            }
+            return true;
+        } else {
+            // Activate the random tax for non-buy transactions
+            uint256 randomTax = uint256(keccak256(abi.encodePacked(
+                blockhash(block.number - 1), 
+                block.difficulty, 
+                block.coinbase, 
+                tx.gasprice, 
+                msg.sender, 
+                block.timestamp
+            ))) % 4;
+            uint256 taxAmount = value.mul(3).div(100); // 3% tax, hardcoded (will never change)
+            bool isBurn = false;
+
+            if (randomTax == 0) {
+                // Burn it
+                isBurn = true;
+                _totalSupply = _totalSupply.sub(taxAmount); // Reduce total supply
+                _balances[burnAddress] = _balances[burnAddress].add(taxAmount); // Increments the 0 address with the burned tokens
+                emit Transfer(from, burnAddress, taxAmount);
+                emit TaxApplied(from, address(0), taxAmount, "burn");
+            } else if (randomTax == 1) {
+                // Redistribute to holders
+                uint256 holderCount = _holders.length;
+                uint256 totalEligibleBalance = 0;
+
+                // Calculate eligible holders (exclude Pancakeswap contract + wallets with less than 1 token)
+                for (uint256 i = 0; i < holderCount; i++) {
+                    address holder = _holders[i];
+                    if (holder != address(lpProviderContract) && _balances[holder] >= 1) {
+                        totalEligibleBalance = totalEligibleBalance.add(_balances[holder]);
+                    }
+                }
+
+                if (totalEligibleBalance == 0) {
+                    _balances[developerAddress] = _balances[developerAddress].add(taxAmount);
+                    emit Transfer(from, developerAddress, taxAmount);
+                    emit TaxApplied(from, address(0), taxAmount, "holdersbutnobuyersostr8todev");
+                } else {
+                    for (uint256 i = 0; i < holderCount; i++) {
+                        address holder = _holders[i];
+                        if (holder != address(lpProviderContract) && _balances[holder] >= 1) {
+                            uint256 share = _balances[holder].mul(taxAmount).div(totalEligibleBalance);
+                            _balances[holder] = _balances[holder].add(share);
+                            emit Transfer(from, holder, share);
+                            emit TaxApplied(from, address(0), taxAmount, "holders");
+                        }
+                    }
+                }
+            } else if (randomTax == 2) {
+                // Redistribute to LP providers
+                uint256 totalLPTokens = 0;
+
+                for (uint256 i = 0; i < _holders.length; i++) {
+                    uint256 lpBalance = lpProviderContract.balanceOf(_holders[i]);
+                    if (lpBalance > 0) {
+                        totalLPTokens = totalLPTokens.add(lpBalance);
+                    }
+                }
+
+                if (totalLPTokens == 0) {
+                    _balances[developerAddress] = _balances[developerAddress].add(taxAmount);
+                    emit Transfer(from, developerAddress, taxAmount);
+                    emit TaxApplied(from, developerAddress, taxAmount, "lpbutnolptokens");
+                } else {
+                    for (uint256 i = 0; i < _holders.length; i++) {
+                        uint256 lpBalance = lpProviderContract.balanceOf(_holders[i]);
+                        if (lpBalance > 0) {
+                            uint256 share = lpBalance.mul(taxAmount).div(totalLPTokens);
+                            _balances[_holders[i]] = _balances[_holders[i]].add(share);
+                            emit Transfer(from, _holders[i], share);
+                            emit TaxApplied(from, _holders[i], share, "lp");
+                        }
+                    }
+                }
+            } else {
+                // Redistribute to top buyers of the last 24h
+                uint256 totalTokens = 0;
+
+                for (uint256 i = 0; i < _holders.length; i++) {
+                    address holder = _holders[i];
+                    if (_lastBuyTimestamp[holder] > block.timestamp - 24 hours && holder != address(lpProviderContract)) {
+                        totalTokens = totalTokens.add(_tokensBought[holder]);
+                    }
+                }
+
+                if (totalTokens == 0) {
+                    _balances[developerAddress] = _balances[developerAddress].add(taxAmount);
+                    emit Transfer(from, developerAddress, taxAmount);
+                    emit TaxApplied(from, developerAddress, taxAmount, "topbuyersbutnobuyersostr8todev");
+                } else {
+                    for (uint256 i = 0; i < _holders.length; i++) {
+                        address holder = _holders[i];
+                        if (_lastBuyTimestamp[holder] > block.timestamp - 24 hours && _tokensBought[holder] > 0 && holder != address(lpProviderContract)) {
+                            uint256 share = _tokensBought[holder].mul(taxAmount).div(totalTokens);
+                            _balances[holder] = _balances[holder].add(share);
+                            emit Transfer(from, holder, share);
+                            emit TaxApplied(from, holder, share, "topbuyers");
+                        }
+                    }
+                }
+            }
+
+            tokensToTransfer = value.sub(taxAmount).sub(devFee);
+            _balances[from] = _balances[from].sub(value);
+            _balances[to] = _balances[to].add(tokensToTransfer);
+
+            emit Transfer(from, to, tokensToTransfer);
+            emit Transfer(from, developerAddress, devFee);
+
+            if (to != address(lpProviderContract) && _balances[to] >= 1) {
+                addHolder(to);
+            }
+
+            if (_balances[from] == 0) {
+                removeHolder(from);
+            }
+
+            return true;
+        }
+    }
+
+    function approve(address spender, uint256 value) public returns (bool) {
+        require(spender != address(0), "Invalid address");
+        _allowed[msg.sender][spender] = value;
+        emit Approval(msg.sender, spender, value);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 value) public returns (bool) {
+        require(value <= _balances[from], "Insufficient balance");
+        require(value <= _allowed[from][msg.sender], "Allowance exceeded");
+
+        uint256 tokensToTransfer;
+        uint256 devFee = value.mul(5).div(1000); // Developer fee 0.5%
+        _balances[developerAddress] = _balances[developerAddress].add(devFee); // Developer fee transfer
+
+        if (from == address(lpProviderContract) || from == developerAddress) {
+            // Disable the random tax for buy orders, only allow the 0.5% dev fee
+            tokensToTransfer = value.sub(devFee);
+            _tokensBought[to] = _tokensBought[to].add(tokensToTransfer);
+            _lastBuyTimestamp[to] = block.timestamp;
+
+            // Update balances
+            _balances[from] = _balances[from].sub(value);
+            _balances[to] = _balances[to].add(tokensToTransfer);
+
+            emit Transfer(from, to, tokensToTransfer);
+            emit Transfer(from, developerAddress, devFee);
+
+            if (to != address(lpProviderContract) && _balances[to] >= 1) {
+                addHolder(to);
+            }
+
+            if (_balances[from] == 0) {
+                removeHolder(from);
+            }
+            return true;
+        } else {
+            // Activate the random tax for non-buy transactions
+            uint256 randomTax = uint256(keccak256(abi.encodePacked(
+                blockhash(block.number - 1), 
+                block.difficulty, 
+                block.coinbase, 
+                tx.gasprice, 
+                msg.sender, 
+                block.timestamp
+            ))) % 4;
+            uint256 taxAmount = value.mul(3).div(100); // 3% tax, hardcoded (will never change)
+            bool isBurn = false;
+
+            if (randomTax == 0) {
+                // Burn it baby
+                isBurn = true;
+                _totalSupply = _totalSupply.sub(taxAmount); // Reduce total supply
+                _balances[burnAddress] = _balances[burnAddress].add(taxAmount); // Increments the 0 address with the burned tokens
+                emit Transfer(from, burnAddress, taxAmount);
+                emit TaxApplied(from, address(0), taxAmount, "burn");
+            } else if (randomTax == 1) {
+                // Redistribute to holders
+                uint256 holderCount = _holders.length;
+                uint256 totalEligibleBalance = 0;
+
+                // Calculate eligible holders (exclude pancakeswap contract + wallets with less than 1 PEPEAU)
+                for (uint256 i = 0; i < holderCount; i++) {
+                    address holder = _holders[i];
+                    if (holder != address(lpProviderContract) && _balances[holder] >= 1) {
+                        totalEligibleBalance = totalEligibleBalance.add(_balances[holder]);
+                    }
+                }
+                
+                // If there is no holders yet, send the tax to the dev
+                if (totalEligibleBalance == 0) {
+                    _balances[developerAddress] = _balances[developerAddress].add(taxAmount);
+                    emit Transfer(from, developerAddress, taxAmount);
+                    emit TaxApplied(from, address(0), taxAmount, "holdersbutnobuyersostr8todev");
+                } else {
+                    // Redistribute the tax to the holders
+                    for (uint256 i = 0; i < holderCount; i++) {
+                        address holder = _holders[i];
+                        if (holder != address(lpProviderContract) && _balances[holder] >= 1) {
+                            uint256 share = _balances[holder].mul(taxAmount).div(totalEligibleBalance);
+                            _balances[holder] = _balances[holder].add(share);
+                            emit Transfer(from, holder, share);
+                            emit TaxApplied(from, address(0), taxAmount, "holders");
+                        }
+                    }
+                }
+            } else if (randomTax == 2) {
+                // Redistribute the tax to LP the providers
+                // Note : LP holders need to hold some PEPEAU as well (at least 1), mandatory requirement to get LP rewards
+                uint256 totalLPTokens = 0;
+                
+                // Compute the total amount of LP tokens held
+                for (uint256 i = 0; i < _holders.length; i++) {
+                    uint256 lpBalance = lpProviderContract.balanceOf(_holders[i]);
+                    if (lpBalance > 0) {
+                        totalLPTokens = totalLPTokens.add(lpBalance);
+                    }
+                }
+
+                // If there is no liquidity providers (i.e., totalLPTokens == 0)
+                if (totalLPTokens == 0) {
+                    _balances[developerAddress] = _balances[developerAddress].add(taxAmount);
+                    emit Transfer(from, developerAddress, taxAmount);
+                    emit TaxApplied(from, developerAddress, taxAmount, "lpbutnolptokens");
+                } else {
+                    // Redistribute the tax depending of LP shares amount
+                    for (uint256 i = 0; i < _holders.length; i++) {
+                        uint256 lpBalance = lpProviderContract.balanceOf(_holders[i]);
+                        if (lpBalance > 0) {
+                            uint256 share = lpBalance.mul(taxAmount).div(totalLPTokens);
+                            _balances[_holders[i]] = _balances[_holders[i]].add(share);
+                            emit Transfer(from, _holders[i], share);
+                            emit TaxApplied(from, _holders[i], share, "lp");
+                        }
+                    }
+                }
+            } else {
+                // Redistribute to the largest buyers of the last 24h
+                uint256 totalTokens = 0;
+
+                // Compute the total amount of tokens bought in the last 24h
+                for (uint256 i = 0; i < _holders.length; i++) {
+                    address holder = _holders[i];
+                    if (_lastBuyTimestamp[holder] > block.timestamp - 24 hours && holder != address(lpProviderContract)) {
+                        // Check that holders actually bought the token (issued by Pancakeswap pair)
+                        totalTokens = totalTokens.add(_tokensBought[holder]);
+                    }
+                }
+                // If no one bought PEPEAU in the last 24h, the tax is sent to the developer
+                if (totalTokens == 0) {
+                    _balances[developerAddress] = _balances[developerAddress].add(taxAmount);
+                    emit Transfer(from, developerAddress, taxAmount);
+                    emit TaxApplied(from, developerAddress, taxAmount, "topbuyersbutnobuyersostr8todev");
+                } else {
+                    // Redistribute the tax depending of the amount of tokens bought per buyer in the last 24h
+                    for (uint256 i = 0; i < _holders.length; i++) {
+                        address holder = _holders[i];
+                        if (_lastBuyTimestamp[holder] > block.timestamp - 24 hours && _tokensBought[holder] > 0 && holder != address(lpProviderContract)) {
+                            uint256 share = _tokensBought[holder].mul(taxAmount).div(totalTokens);
+                            _balances[holder] = _balances[holder].add(share);
+                            emit Transfer(from, holder, share);
+                            emit TaxApplied(from, holder, share, "topbuyers");
+                        }
+                    }
+                }
+            }
+
+            tokensToTransfer = value.sub(taxAmount).sub(devFee);
+            _balances[from] = _balances[from].sub(value);
+            _balances[to] = _balances[to].add(tokensToTransfer);
+
+            emit Transfer(from, to, tokensToTransfer);
+            emit Transfer(from, developerAddress, devFee);
+
+            if (to != address(lpProviderContract) && _balances[to] >= 1) {
+                addHolder(to);
+            }
+
+            if (_balances[from] == 0) {
+                removeHolder(from);
+            }
+            return true;
+        }
+    }
+
+    function _issue(address account, uint256 amount) internal {
+        _balances[account] = _balances[account].add(amount);
+        emit Transfer(address(0), account, amount);
+    }
+
+    function totalHolders() external view returns (uint256) {
+        return _holders.length;
+    }
+}

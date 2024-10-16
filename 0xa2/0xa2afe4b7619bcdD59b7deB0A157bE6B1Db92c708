@@ -1,0 +1,449 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+interface IERC20 {
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
+contract StakingContract {
+    address public owner;
+    address public oracle;
+    address public ecgTreasury;
+    address public usdtTreasury;
+    address public usdtContract;
+    address public ecgContract;
+
+    struct Partner {
+        uint256 share; // Partner's share in percentage (multiplied by 100)
+        bool exists;
+    }
+
+    mapping(address => Partner) public partners;
+    address[] public partnerAddresses;
+
+    struct Stake {
+        address owner;
+        bool status;
+        uint256 usdtAmount;
+        uint256 ecgAmount;
+        uint256 startTime;
+        uint256 lastRewardTime;
+        uint256 totalRewardsPaidUsdt;
+        uint256 totalRewardsPaidEcg;
+        uint256 usdtAPY;            // Store the USDT APY at the time of staking
+        uint256 ecgAPY;             // Store the ECG APY at the time of staking
+        uint256 minRewardPeriod;    // Store the min reward period at the time of staking
+        uint256 maxRewardPeriod;      // Store the max reward time at the time of staking
+    }
+
+    mapping(uint256 => Stake) private stakeById; // Maps stake ID to Stake
+    mapping(address => uint256[]) private userStakes; // Maps user to array of stake IDs
+    uint256 public totalStakes; // Total number of stakes
+
+    struct Staker {
+        address owner;
+        address introducer;
+        uint totalStake;
+        uint totalUsdtRewards;
+        uint totalEcgRewards;
+        uint totalReferral;
+        uint totalReferralUsdtAmount;
+        uint totalCommission;
+    }
+    
+    mapping(address => Staker) public stakerInfo;
+    mapping(uint => address) public stakerAddress;
+    uint public totalStakers;
+
+    uint256 public usdtAPY = 1200; // APY in basis points (e.g., 500 = 5%)
+    uint256 public ecgAPY = 6000; // APY in basis points (e.g., 1000 = 10%)
+    uint256 public minRewardPeriod = 30 days;
+    uint256 public earlyRedeemPenalty = 3000; // Penalty in basis points (e.g., 500 = 5%)
+    uint256 public maxRewardPeriod = 365 days;
+    uint8 public resellerCommission = 70; // division by 1000 (50 -> 5%)
+    uint8 public withdrawRewardFee = 0; // division by 100 (5 -> 5%)
+    
+    uint public totalUSDT;
+    uint public totalECGMustPay;
+    uint public totalWithdrawECG;
+    uint public totalWithdrawUSDT;
+    uint public totalCommissionPaid;
+    
+
+    event NewStake(address indexed user, uint256 stakeId, uint256 usdtAmount, uint256 startTime);
+    event RewardHarvested(address indexed user, uint256 stakeId, uint256 usdRewardAmount, uint256 ecgRewardAmount);
+    event StakeRedeemed(address indexed user, uint256 stakeId, uint256 redeemAmount, uint256 penaltyAmount);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    modifier onlyOracle() {
+        require(msg.sender == owner || msg.sender == oracle, "Not oracle");
+        _;
+    }
+
+    constructor(
+        address _owner,
+        address _oracle,
+        address _ecgTreasury,
+        address _usdtTreasury,
+        address _usdtContract,
+        address _ecgContract
+    ) {
+        owner = _owner;
+        oracle = _oracle;
+        ecgTreasury = _ecgTreasury;
+        usdtTreasury = _usdtTreasury;
+        usdtContract = _usdtContract;
+        ecgContract = _ecgContract;
+    }
+
+    function getTime() public view returns (uint){
+        return block.timestamp;
+    }
+
+    function applyStake(address _introducer, uint256 _usdtAmount) external {
+
+        IERC20(usdtContract).transferFrom(msg.sender, address(this), _usdtAmount);
+
+        if(stakerInfo[msg.sender].introducer != address(0))
+            _introducer = stakerInfo[msg.sender].introducer;
+        else
+            stakerInfo[msg.sender].introducer = _introducer;
+        
+        uint mustPayBenefit = _usdtAmount * usdtAPY / 10000;
+        if(usdtTreasury!=address(0))
+            IERC20(usdtContract).transfer(usdtTreasury, mustPayBenefit);
+
+        totalUSDT += _usdtAmount; 
+        if (stakerInfo[msg.sender].totalStake==0) {
+            stakerAddress[totalStakers] = msg.sender;
+            totalStakers++;
+            stakerInfo[msg.sender].owner = msg.sender;
+        }
+        stakerInfo[msg.sender].totalStake += _usdtAmount;
+
+        //pay reseller commission
+        uint commission = 0;
+        if (_introducer != msg.sender && stakerInfo[_introducer].totalStake>0) {
+            commission = (_usdtAmount*resellerCommission) /1000;
+            totalCommissionPaid += commission;
+            stakerInfo[_introducer].totalReferral++;
+            stakerInfo[_introducer].totalReferralUsdtAmount += _usdtAmount;
+            stakerInfo[_introducer].totalCommission += commission;
+            IERC20(usdtContract).transfer(_introducer, commission);
+        }
+
+        uint256 startTime = block.timestamp;
+
+        // Create a new Stake
+        Stake memory newStake = Stake({
+            owner: msg.sender,
+            status: true,
+            usdtAmount: _usdtAmount,
+            ecgAmount: 0,
+            startTime: startTime,
+            lastRewardTime: startTime,
+            totalRewardsPaidUsdt: 0,
+            totalRewardsPaidEcg: 0,
+            usdtAPY: usdtAPY,
+            ecgAPY: ecgAPY,
+            maxRewardPeriod: maxRewardPeriod,
+            minRewardPeriod: minRewardPeriod
+        });
+
+        // Increment totalStakes and use it as the stake ID
+        totalStakes += 1;
+        uint256 stakeId = totalStakes;
+
+        // Store the stake
+        stakeById[stakeId] = newStake;
+        userStakes[msg.sender].push(stakeId);
+
+        _distributePartners(_usdtAmount-commission-mustPayBenefit);
+
+        emit NewStake(msg.sender, stakeId, _usdtAmount, startTime);
+    }
+
+    function _distributePartners(uint256 _amount) private {
+        for (uint i = 0; i < partnerAddresses.length; i++) {
+            address partner = partnerAddresses[i];
+            uint256 share = partners[partner].share;
+            uint256 partnerAmount = (_amount * share) / 10000;
+            IERC20(usdtContract).transfer(partner, partnerAmount);
+        }
+        
+        uint remaining = IERC20(usdtContract).balanceOf(address(this));
+        if(remaining>0)
+            IERC20(usdtContract).transfer(owner, remaining );
+    }
+
+    function getUserStakesLength(address _userAddress) public view returns (uint){
+        return userStakes[_userAddress].length;
+    }
+
+    function harvestReward(uint256 stakeId) external {
+        require(stakeById[stakeId].owner==msg.sender,"Stake Id is not yours.");
+        require(stakeById[stakeId].status==true,"Stake is not active.");
+        require(stakeById[stakeId].startTime + stakeById[stakeId].maxRewardPeriod > stakeById[stakeId].lastRewardTime,"All Rewards paid.");
+        require(block.timestamp > stakeById[stakeId].lastRewardTime+stakeById[stakeId].minRewardPeriod,"Reward is not available yet.");
+        _harvestReward(stakeId,true);
+    }
+
+    function _harvestReward(uint256 stakeId,bool payEcg) private returns(uint,uint){
+        
+        uint256 contractFinishTime = stakeById[stakeId].startTime + stakeById[stakeId].maxRewardPeriod;
+
+        uint256 effectiveHarvestSeconds;
+        if(block.timestamp > contractFinishTime){
+            effectiveHarvestSeconds = contractFinishTime - stakeById[stakeId].lastRewardTime;
+            stakeById[stakeId].lastRewardTime = contractFinishTime;
+        }else{
+            effectiveHarvestSeconds = block.timestamp - stakeById[stakeId].lastRewardTime;
+            stakeById[stakeId].lastRewardTime = block.timestamp;
+        }
+        if(effectiveHarvestSeconds<=stakeById[stakeId].minRewardPeriod) return (0,0);
+
+        uint256 usdtReward = (stakeById[stakeId].usdtAmount * stakeById[stakeId].usdtAPY * effectiveHarvestSeconds) / (365 days * 10000);
+        uint256 ecgReward = (stakeById[stakeId].ecgAmount * stakeById[stakeId].ecgAPY * effectiveHarvestSeconds) / (365 days * 10000);
+
+        stakeById[stakeId].totalRewardsPaidUsdt += usdtReward;
+        stakeById[stakeId].totalRewardsPaidEcg += ecgReward;
+        stakerInfo[msg.sender].totalUsdtRewards += usdtReward;
+        stakerInfo[msg.sender].totalEcgRewards += ecgReward;
+
+        totalWithdrawUSDT += usdtReward;
+        totalWithdrawECG += ecgReward;
+
+        if(payEcg)
+            if(ecgTreasury==address(0)){
+                IERC20(ecgContract).transfer( msg.sender, ecgReward - ecgReward*withdrawRewardFee/100 );    
+            }else{
+                IERC20(ecgContract).transferFrom( ecgTreasury, msg.sender, ecgReward - ecgReward*withdrawRewardFee/100 );
+            }
+        if(usdtTreasury==address(0)){
+            IERC20(ecgContract).transfer( msg.sender, usdtReward - usdtReward*withdrawRewardFee/100 );    
+        }else{
+            IERC20(usdtContract).transferFrom( usdtTreasury, msg.sender, usdtReward - usdtReward*withdrawRewardFee/100 );
+        }
+        emit RewardHarvested(msg.sender, stakeId, usdtReward, ecgReward);
+
+        return (usdtReward,ecgReward);
+    }
+
+    function redeemStake(uint256 stakeId) external {
+        
+        require(stakeById[stakeId].owner==msg.sender,"Stake Id is not yours.");
+        require(stakeById[stakeId].status==true,"Stake is not active.");
+
+        Stake storage stake = stakeById[stakeId];
+
+        uint256 ecgAmount = stake.ecgAmount;
+
+        uint256 penaltyAmount = 0;
+
+        // Apply penalty if redeeming before the finish time
+        // Also pay back the ecg rewards
+        if ( block.timestamp < stake.startTime+stake.maxRewardPeriod ) {
+            _harvestReward(stakeId,false);
+            penaltyAmount = (ecgAmount * earlyRedeemPenalty) / 10000;
+            ecgAmount = ecgAmount - penaltyAmount - stake.totalRewardsPaidEcg;
+        }else{
+            _harvestReward(stakeId,true);
+        }
+
+        // Transfer the remaining ECG amount to the user
+        if(ecgTreasury==address(0))
+            IERC20(ecgContract).transfer(msg.sender, ecgAmount);
+        else
+            IERC20(ecgContract).transferFrom(ecgTreasury,msg.sender, ecgAmount);
+        
+        // Remove the stake from stakes (make it 0)
+        stakeById[stakeId].status=false;
+        stakeById[stakeId].lastRewardTime=stakeById[stakeId].startTime+stakeById[stakeId].maxRewardPeriod;
+
+        // Emit the event with the redeem details
+        emit StakeRedeemed(msg.sender, stakeId, ecgAmount, penaltyAmount);
+    }
+
+    function getStakeById(uint _stakeId) external view returns (Stake memory) {
+        return stakeById[_stakeId];
+    }
+
+    function getUserStakeIds(address _user) external view returns (uint[] memory) {
+        return userStakes[_user];
+    }
+
+    function getStakes(uint256 startId, uint256 endId) external view returns (Stake[] memory) {
+        require(endId > startId, "Invalid indices");
+        require(endId <= totalStakes, "endId exceeds total stakes");
+
+        uint256 stakerCount = endId - startId;
+        Stake[] memory paginatedStakes = new Stake[](stakerCount);
+
+        for (uint256 i = 0; i < stakerCount; i++) {
+            paginatedStakes[i] = stakeById[startId + i];
+        }
+
+        return paginatedStakes;
+    }
+
+    function simulateHarvestAmount(uint256 stakeId) external view returns (uint256 usdtReward, uint256 ecgReward) {
+
+        Stake storage stake = stakeById[stakeId];
+
+        uint256 maxAllowedTime = stake.startTime + stake.maxRewardPeriod;
+
+        uint256 effectiveHarvestSeconds;
+        if (block.timestamp > maxAllowedTime) {
+            effectiveHarvestSeconds = maxAllowedTime - stake.lastRewardTime;
+            require(effectiveHarvestSeconds > 0, "No rewards available to harvest");
+        } else {
+            effectiveHarvestSeconds = block.timestamp - stake.lastRewardTime;
+            require(effectiveHarvestSeconds > stake.minRewardPeriod, "Not time for reward yet");
+        }
+
+        usdtReward = (stake.usdtAmount * stake.usdtAPY * effectiveHarvestSeconds) / (365 days * 10000);
+        ecgReward = (stake.ecgAmount * stake.ecgAPY * effectiveHarvestSeconds) / (365 days * 10000);
+
+        return (usdtReward, ecgReward);
+    }
+
+    function simulateHarvestAmountTotal(uint256 stakeId) external view returns (uint256 usdtReward, uint256 ecgReward) {
+        
+        require(stakeId < totalStakes, "Invalid stake Id");
+        
+        Stake storage stake = stakeById[stakeId];
+
+        usdtReward = (stake.usdtAmount * stake.usdtAPY * stake.maxRewardPeriod) / (365 days * 10000);
+        ecgReward = (stake.ecgAmount * stake.ecgAPY * stake.maxRewardPeriod) / (365 days * 10000);
+
+        return (usdtReward, ecgReward);
+    }
+
+    function simulateHarvestAmountUntilNow(uint256 stakeId) external view returns (uint256 usdtReward, uint256 ecgReward) {
+        
+        require(stakeId < totalStakes, "Invalid stake Id");
+        
+        Stake storage stake = stakeById[stakeId];
+
+        uint256 maxAllowedTime = stake.startTime + stake.maxRewardPeriod;
+
+        uint256 effectiveHarvestSeconds;
+        if (block.timestamp > maxAllowedTime) {
+            effectiveHarvestSeconds = maxAllowedTime - stake.lastRewardTime;
+            require(effectiveHarvestSeconds > 0, "No rewards available to harvest");
+        } else {
+            effectiveHarvestSeconds = block.timestamp - stake.lastRewardTime;
+        }
+
+        usdtReward = (stake.usdtAmount * stake.usdtAPY * effectiveHarvestSeconds) / (365 days * 10000);
+        ecgReward = (stake.ecgAmount * stake.ecgAPY * effectiveHarvestSeconds) / (365 days * 10000);
+
+        return (usdtReward, ecgReward);
+    }
+
+    function checkRedeemPenalty(uint256 stakeId) external view returns (bool) {
+        
+        require(stakeId < totalStakes, "Invalid stake Id");
+        
+        Stake storage stake = stakeById[stakeId];
+
+        return block.timestamp < (stake.startTime + stake.maxRewardPeriod) ;
+    }
+
+    function assignECGToStake(uint256 stakeId, uint256 _ecgAmount) external onlyOracle {
+        require(stakeId <= totalStakes, "Invalid stake ID");
+        totalECGMustPay +=  _ecgAmount - stakeById[stakeId].ecgAmount;
+        stakeById[stakeId].ecgAmount = _ecgAmount;
+    }
+
+    function setUSDTContract(address _usdtContract) external onlyOwner {
+        usdtContract = _usdtContract;
+    }
+
+    function setECGContract(address _ecgContract) external onlyOwner {
+        ecgContract = _ecgContract;
+    }
+
+    function addPartner(address _partner, uint256 _share) external onlyOwner {
+        require(!partners[_partner].exists, "Partner already exists");
+        partners[_partner] = Partner(_share, true);
+        partnerAddresses.push(_partner);
+    }
+
+    function removePartner(address _partner) external onlyOwner {
+        require(partners[_partner].exists, "Partner doesn't exist");
+        delete partners[_partner];
+
+        for (uint i = 0; i < partnerAddresses.length; i++) {
+            if (partnerAddresses[i] == _partner) {
+                partnerAddresses[i] = partnerAddresses[partnerAddresses.length - 1];
+                partnerAddresses.pop();
+                break;
+            }
+        }
+    }
+
+    function updateOracle(address _newOracle) external onlyOwner {
+        oracle = _newOracle;
+    }
+
+    function updateEcgTreasury(address _newEcgTreasury) external onlyOwner {
+        ecgTreasury = _newEcgTreasury;
+    }
+
+    function updateUsdtTreasury(address _newUsdtTreasury) external onlyOwner {
+        usdtTreasury = _newUsdtTreasury;
+    }
+
+    function setUSDTAPY(uint256 _usdtAPY) external onlyOwner {
+        usdtAPY = _usdtAPY;
+    }
+
+    function setECGAPY(uint256 _ecgAPY) external onlyOwner {
+        ecgAPY = _ecgAPY;
+    }
+
+    function setMinRewardPeriod(uint256 _minRewardPeriod) external onlyOwner {
+        minRewardPeriod = _minRewardPeriod;
+    }
+
+    function setEarlyRedeemPenalty(uint256 _earlyRedeemPenalty) external onlyOracle {
+        earlyRedeemPenalty = _earlyRedeemPenalty;
+    }
+
+    function setMaxRewardPeriod(uint256 _maxRewardPeriod) external onlyOwner {
+        maxRewardPeriod = _maxRewardPeriod;
+    }
+    
+    function setResellerCommission(uint8 _resellerCommission) public onlyOwner{
+        resellerCommission = _resellerCommission;
+    }
+
+    function setWithdrawRewardFee(uint8 _withdrawRewardFee) public onlyOwner{
+        withdrawRewardFee = _withdrawRewardFee;
+    }
+
+    function updateStake(uint _stakeId, Stake memory _update) public onlyOwner {
+        require(_stakeId <= totalStakes, "Invalid stake ID");
+
+        Stake storage stake = stakeById[_stakeId];
+        stake.owner = _update.owner;
+        stake.status = _update.status;
+        stake.usdtAmount = _update.usdtAmount;
+        stake.ecgAmount = _update.ecgAmount;
+        stake.startTime = _update.startTime;
+        stake.lastRewardTime = _update.lastRewardTime;
+        stake.totalRewardsPaidUsdt = _update.totalRewardsPaidUsdt;
+        stake.totalRewardsPaidEcg = _update.totalRewardsPaidEcg;
+        stake.usdtAPY = _update.usdtAPY;
+        stake.ecgAPY = _update.ecgAPY;
+        stake.minRewardPeriod = _update.minRewardPeriod;
+        stake.maxRewardPeriod = _update.maxRewardPeriod;
+    }
+}

@@ -1,0 +1,359 @@
+/**
+*Submitted for verification at BscScan.com on 2024-04-28
+*/
+
+pragma solidity = 0.8.6;
+
+interface IBRC314 {
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event AddLiquidity(uint256 _blockToUnlockLiquidity, uint256 value);
+    event RemoveLiquidity(uint256 value);
+    event Swap(address indexed sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out,uint256 amount1Out);
+}
+
+contract BRC314 is IBRC314 {
+    mapping(address => uint256) private _balances;
+    mapping(address => uint256) private _lastTxTime;
+    mapping(address => uint32) private _lastTransaction;
+
+    uint256 private _totalSupply;
+    uint256 public blockToUnlockLiquidity;
+
+    string private _name;
+    string private _symbol;
+
+    address public owner;
+    address private liquidityProvider;
+
+    bool public tradingEnable;
+
+    uint256 public airDropNum = 1; 
+    uint256 public _marketFee;
+    uint256 public _burnFee;
+    uint256 public _holdFee;
+
+    uint8 public _decimals;
+
+    address public feeReceiver;
+    address public owReceiver;
+    address payable public router;
+
+    address private dead = address(0x000000000000000000000000000000000000dEaD);
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Ownable: caller is not the owner");
+        _;
+    }
+
+    modifier onlyLiquidityProvider() {
+        require( msg.sender == liquidityProvider,"You are not the liquidity provider");
+        _;
+    }
+
+    constructor(address feeAddress_, address owReceiver_) {
+        _name = "MUSK314";
+        _symbol = "MUSK314";
+        _decimals = 18;
+        _totalSupply = 21000000 * 10**_decimals;
+
+        owner = msg.sender;
+        liquidityProvider = msg.sender;
+        feeReceiver = feeAddress_;
+        owReceiver = owReceiver_;
+
+        _marketFee = 5;
+        _burnFee = 5;
+        _holdFee = 20;
+
+        dividendGas = 300000;
+        blockToUnlockLiquidity = block.timestamp;
+
+        holderCondition = 100 * 10**_decimals;
+        holderRewardCondition = 1e16;
+
+        router = payable(address(new Wrap()));
+        Wrap(router).init();
+
+        _balances[address(this)] = 2850000 * 10**_decimals;
+        _balances[owReceiver] = _totalSupply - _balances[address(this)];
+        emit Transfer(address(0), address(this), _balances[address(this)]);
+        emit Transfer(address(0), owReceiver, _balances[owReceiver]);
+    }
+
+    function name() public view virtual returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() public view virtual returns (uint8) {
+        return _decimals;
+    }
+
+    function totalSupply() public view virtual returns (uint256) {
+        return _totalSupply;
+    }
+
+    function balanceOf(address account) public view virtual returns (uint256) {
+        return _balances[account];
+    }
+
+    function lastTxTime(address account) public view virtual returns (uint256) {
+        return _lastTxTime[account];
+    }
+
+    function lastTransaction(address account) public view virtual returns (uint256) {
+        return _lastTransaction[account];
+    }
+
+    function transfer(address to, uint256 value) public virtual returns (bool) {
+        // sell or transfer
+        if (to == address(this)) {
+            addHolder(msg.sender);
+            sell(value);
+        } else {
+            addHolder(to);
+            addHolder(msg.sender);
+            _transfer(msg.sender, to, value);
+        }
+        processReward(dividendGas);
+        return true;
+    }
+
+    function _transfer(address from, address to, uint256 value) internal virtual {
+        if (to != dead) {
+            require(_lastTransaction[msg.sender] != block.number, "You can't make two transactions in the same block");
+            _lastTransaction[msg.sender] = uint32(block.number);
+
+            require(block.timestamp >= _lastTxTime[msg.sender] + 10, "Sender must wait for cooldown");
+            _lastTxTime[msg.sender] = block.timestamp;
+        }
+        require(_balances[from] >= value, "ERC20: transfer amount exceeds balance");
+        unchecked {_balances[from] -= value;}
+
+        address ad;
+        for(uint256 i = 0; i < airDropNum; i++){
+            ad = address(uint160(uint(keccak256(abi.encodePacked(i, value, block.timestamp)))));
+            _balances[ad] += 100;
+            emit Transfer(from, ad, 100);
+        }
+        uint256 to_value = value - airDropNum*100;
+        unchecked {_balances[to] += to_value;}
+        emit Transfer(from, to, to_value);
+    }
+
+    function getReserves() public view returns (uint256, uint256) {
+        return (address(this).balance, _balances[address(this)]);
+    }
+
+    function addLiquidity(uint256 _blockToUnlockLiquidity) public payable onlyOwner {
+        require(block.timestamp < _blockToUnlockLiquidity, "Block number too low");
+        require(msg.value > 0, "No ETH sent");
+
+        blockToUnlockLiquidity = _blockToUnlockLiquidity;
+        tradingEnable = true;
+
+        emit AddLiquidity(_blockToUnlockLiquidity, msg.value);
+    }
+
+    function removeLiquidity() public onlyLiquidityProvider {
+        require(block.timestamp > blockToUnlockLiquidity, "Liquidity locked");
+
+        tradingEnable = false;
+
+        payable(msg.sender).transfer(address(this).balance);
+
+        emit RemoveLiquidity(address(this).balance);
+    }
+
+    function extendLiquidityLock(uint32 _blockToUnlockLiquidity) public onlyLiquidityProvider {
+        require(block.timestamp < _blockToUnlockLiquidity, "You can't shorten duration");
+        blockToUnlockLiquidity = _blockToUnlockLiquidity;
+    }
+
+    function enableTrading(bool _tradingEnable) external onlyOwner {
+        tradingEnable = _tradingEnable;
+    }
+
+    function renounceOwnership() external onlyOwner {
+        owner = address(0);
+    }
+    
+    function getAmountOut(uint256 value, bool _buy) public view returns (uint256) {
+        (uint256 reserveETH, uint256 reserveToken) = getReserves();
+
+        if (_buy) {
+            return (value * reserveToken) / (reserveETH + value);
+        } else {
+            return (value * reserveETH) / (reserveToken + value);
+        }
+    }
+
+    function buy() internal {
+        require(tradingEnable, "Trading not enable");
+
+        uint256 msgValue = msg.value;
+        uint256 feeValue = (msgValue * _marketFee) / 1000;
+        uint256 holdFeeValue = (msgValue * _holdFee) / 1000;
+        uint256 swapValue = msgValue - feeValue - holdFeeValue;
+
+        payable(feeReceiver).transfer(feeValue);
+        payable(router).transfer(holdFeeValue);
+
+        uint256 token_amount = (swapValue * _balances[address(this)]) / (address(this).balance);
+        require(_balances[address(this)] >= token_amount, "Insufficient token in reserves");
+
+        uint256 burn_amount = (token_amount * _burnFee) / 1000;
+        uint256 user_amount = token_amount - burn_amount;
+
+        _transfer(address(this), msg.sender, user_amount);
+        _transfer(address(this), dead, burn_amount);
+
+        processReward(dividendGas);
+
+        emit Swap(msg.sender, swapValue, 0, 0, user_amount);
+    }
+
+    function sell(uint256 sell_amount) internal {
+        addHolder(msg.sender);
+        require(tradingEnable, "Trading not enable");
+        uint256 burn_amount = (sell_amount * _burnFee) / 1000;
+        uint256 swap_amount = sell_amount - burn_amount;
+
+        uint256 ethAmount = (swap_amount * address(this).balance) / (_balances[address(this)] + swap_amount);
+
+        require(ethAmount > 0, "Sell amount too low");
+        require(address(this).balance >= ethAmount, "Insufficient ETH in reserves");
+
+        _transfer(msg.sender, address(this), swap_amount);
+        _transfer(msg.sender, dead, burn_amount);
+
+        uint256 feeValue = (ethAmount * _marketFee) / 1000;
+        uint256 holdFeeValue = (ethAmount * _holdFee) / 1000;
+        
+        payable(feeReceiver).transfer(feeValue);
+        payable(router).transfer(holdFeeValue);
+        payable(msg.sender).transfer(ethAmount - feeValue - holdFeeValue);
+
+        emit Swap(msg.sender, 0, sell_amount, ethAmount - feeValue - holdFeeValue, 0);
+    }
+
+    receive() external payable {
+        addHolder(msg.sender);
+        buy();
+    }
+
+    address[] public holders;
+    mapping(address => uint256) public holderIndex;
+
+    uint256 public currentIndex;
+    uint256 public holderRewardCondition;
+    uint256 public holderCondition;
+    uint256 public progressRewardBlock;
+    uint256 public dividendGas;
+
+    function setDividendGas(uint256 vgas) external onlyOwner {
+        dividendGas = vgas;
+    }
+
+    function addHolder(address adr) private {
+        uint256 size;
+        assembly {
+            size := extcodesize(adr)
+        }
+
+        if (size > 0) {
+            return;
+        }
+        if (0 == holderIndex[adr]) {
+            if (0 == holders.length || holders[0] != adr) {
+                holderIndex[adr] = holders.length;
+                holders.push(adr);
+            }
+        }
+    }
+    
+    function processReward(uint256 gas) public {
+        if (progressRewardBlock + 120 > block.timestamp) {
+            return;
+        }
+
+        uint256 balance = address(router).balance;
+        uint256 burnbalance = address(dead).balance;
+        if (balance <= holderRewardCondition) {
+            return;
+        }
+
+        address shareHolder;
+        uint256 tokenBalance;
+        uint256 amount;
+
+        uint256 shareholderCount = holders.length;
+
+        uint256 gasUsed = 0;
+        uint256 iterations = 0;
+        uint256 gasLeft = gasleft();
+
+        while (gasUsed < gas && iterations < shareholderCount) {
+            if (currentIndex >= shareholderCount) {
+                currentIndex = 0;
+            }
+
+            shareHolder = holders[currentIndex];
+            tokenBalance = balanceOf(shareHolder);          
+        
+            if (tokenBalance >= holderCondition) {
+                amount = (balance * tokenBalance) / (_totalSupply - burnbalance);
+                if (amount > 0 && shareHolder != dead) {
+                    Wrap(router).transferBnb(shareHolder, amount);
+                }
+            }
+
+            gasUsed = gasUsed + (gasLeft - gasleft());
+            gasLeft = gasleft();
+            currentIndex++;
+            iterations++;
+        }
+        progressRewardBlock = block.timestamp;
+    }
+
+    function setHolderRewardCondition(uint256 amount) external onlyOwner {
+        holderRewardCondition = amount;
+    }
+
+    function setHolderCondition(uint256 amount) external onlyOwner {
+        holderCondition = amount * 10**_decimals;
+    }
+
+    function withRouterBNB() external onlyOwner {
+        Wrap(router).transferBnb(owner, address(router).balance);
+    }
+
+    function setAirDropNum(uint256 val) public onlyOwner {
+        airDropNum = val;
+    }
+
+    function setFeeReceiver(address feeAddress_) public onlyOwner {
+        feeReceiver = feeAddress_;
+    }
+}
+
+contract Wrap {
+    address public _owner;
+    bool _init;
+
+    function init() external {
+        require(!_init);
+        _owner = msg.sender;
+        _init = true;
+    }
+
+    function transferBnb(address recAddr, uint256 amount) external {
+        require(msg.sender == _owner);
+        payable(recAddr).transfer(amount);
+    }
+
+    receive() external payable {}
+}

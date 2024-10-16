@@ -1,0 +1,223 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract StakingContract {
+    // 定义一个结构体来存储每笔质押的信息
+    struct Stake {
+        uint256 amount;      // 质押金额
+        uint256 startTime;   // 质押开始时间
+        uint256 plan;        // 质押计划
+    }
+
+    // 使用映射来存储每个地址的所有质押信息
+    mapping(address => Stake[]) public stakes;
+    // 使用映射来存储每个地址的累积分红数量
+    mapping(address => uint256) public userRewards;
+    // 存储所有质押用户地址的数组
+    address[] public stakers;
+    // 记录是否已经在stakers数组中的映射
+    mapping(address => bool) public isStaker;
+
+    // 质押计划（以秒为单位）
+    uint256[3] public stakingPlans = [30 days, 90 days, 180 days];
+    // 不同质押计划的年化收益率（百分比）
+    uint256[3] public interestRates = [8, 28, 60];
+
+
+    // 定义ERC20代币接口
+    IERC20 public token;
+    // 定义USDT代币接口
+    IERC20 public usdt;
+    // 定义合约所有者
+    address public owner;
+    // 记录总质押代币数量
+    uint256 public totalStaked;
+
+    // 质押事件
+    event Staked(address indexed user, uint256 amount, uint256 plan);
+    // 解除质押事件
+    event Unstaked(address indexed user, uint256 amount, uint256 reward);
+    // 分红事件
+    event RewardDistributed(address indexed user, uint256 reward);
+    // 提取事件
+    event Withdrawn(address indexed owner, uint256 amount);
+    // 转移所有权事件
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    // 分红领取事件
+    event RewardClaimed(address indexed user, uint256 reward);
+
+    // 构造函数，初始化代币合约地址和合约所有者
+    constructor(IERC20 _token, IERC20 _usdt) {
+        token = _token;
+        usdt = _usdt;
+        owner = msg.sender;
+    }
+
+    // 修改器，用于限制只有所有者可以调用某些函数
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can call this function");
+        _;
+    }
+
+    // 质押函数
+    function stake(uint256 _amount, uint256 _plan) external {
+        require(_plan >= 0 && _plan < 4, "Invalid staking plan");
+        require(_amount > 0, "Stake amount must be greater than 0");
+
+        // 将代币转移到合约
+        token.transferFrom(msg.sender, address(this), _amount);
+
+        // 存储质押信息
+        stakes[msg.sender].push(Stake({
+            amount: _amount,
+            startTime: block.timestamp,
+            plan: _plan
+        }));
+
+        // 如果用户是首次质押，将其添加到stakers数组中
+        if (!isStaker[msg.sender]) {
+            stakers.push(msg.sender);
+            isStaker[msg.sender] = true;
+        }
+
+        // 更新总质押代币数量
+        totalStaked += _amount;
+
+        emit Staked(msg.sender, _amount, _plan);
+    }
+
+    // 解除质押函数
+    function unstake(uint256 _index) external {
+        require(_index < stakes[msg.sender].length, "Invalid staking index");
+
+        Stake memory userStake = stakes[msg.sender][_index];
+        uint256 stakingTime = block.timestamp - userStake.startTime;
+        require(stakingTime >= stakingPlans[userStake.plan], "Staking period not yet finished");
+
+        // 计算奖励
+        uint256 reward = (userStake.amount * interestRates[userStake.plan]) / 100;
+        uint256 totalAmount = userStake.amount + reward;
+
+        // 删除质押信息
+        totalStaked -= userStake.amount;
+
+        // 删除特定质押，并将数组最后一个元素移到删除的位置，以保持数组连续性
+        if (_index < stakes[msg.sender].length - 1) {
+            stakes[msg.sender][_index] = stakes[msg.sender][stakes[msg.sender].length - 1];
+        }
+        stakes[msg.sender].pop();
+
+        // 如果用户没有剩余的质押，更新isStaker状态
+        if (stakes[msg.sender].length == 0) {
+            isStaker[msg.sender] = false;
+        }
+
+        // 将代币转回给用户
+        token.transfer(msg.sender, totalAmount);
+
+        emit Unstaked(msg.sender, userStake.amount, reward);
+    }
+
+    // 分配分红函数
+    function distributeRewards() external onlyOwner {
+        uint256 totalRewardsAvailable = usdt.balanceOf(address(this));
+        require(totalRewardsAvailable > 0, "No rewards to distribute");
+
+        // 遍历每个质押用户
+        for (uint256 i = 0; i < stakers.length; i++) {
+            address user = stakers[i];
+            if (isStaker[user]) {
+                uint256 userTotalStaked = getUserTotalStaked(user);
+
+                // 计算用户的分红
+                uint256 userReward = (userTotalStaked * totalRewardsAvailable) / totalStaked;
+                if (userReward > 0) {
+                    userRewards[user] += userReward;
+                    emit RewardDistributed(user, userReward);
+                }
+            }
+        }
+    }
+
+    // 领取分红函数
+    function claimRewards() external {
+        uint256 reward = userRewards[msg.sender];
+        require(reward > 0, "No rewards to claim");
+
+        // 清空用户的累积分红
+        userRewards[msg.sender] = 0;
+
+        // 将分红转给用户
+        usdt.transfer(msg.sender, reward);
+
+        emit RewardClaimed(msg.sender, reward);
+    }
+
+    // 计算用户总质押金额的函数
+    function getUserTotalStaked(address _user) internal view returns (uint256) {
+        uint256 userTotalStaked = 0;
+        for (uint256 i = 0; i < stakes[_user].length; i++) {
+            userTotalStaked += stakes[_user][i].amount;
+        }
+        return userTotalStaked;
+    }
+
+    // 查询用户分红数量的函数
+    function getUserReward(address _user) external view returns (uint256) {
+        return userRewards[_user];
+    }
+
+    // 获取质押信息的函数
+    function getStakes(address _user) external view returns (Stake[] memory) {
+        return stakes[_user];
+    }
+
+    // 获取质押开始时间和结束时间的函数
+    function getStakeTimes(address _user, uint256 _index) external view returns (uint256 startTime, uint256 endTime) {
+        require(_index < stakes[_user].length, "Invalid staking index");
+
+        Stake memory userStake = stakes[_user][_index];
+        startTime = userStake.startTime;
+        endTime = userStake.startTime + stakingPlans[userStake.plan];
+    }
+
+    // 获取合约中的代币余额
+    function getContractBalance() external view returns (uint256) {
+        return token.balanceOf(address(this));
+    }
+
+    // 获取合约中的USDT余额
+    function getUSDTBalance() external view returns (uint256) {
+        return usdt.balanceOf(address(this));
+    }
+
+    // 提取合约中所有代币的函数，只有所有者可以调用
+    function withdrawTokens(uint256 _amount) external onlyOwner {
+        require(_amount <= token.balanceOf(address(this)), "Insufficient balance");
+
+        token.transfer(owner, _amount);
+        emit Withdrawn(owner, _amount);
+    }
+
+    // 提取合约中所有USDT的函数，只有所有者可以调用
+    function withdrawUSDT(uint256 _amount) external onlyOwner {
+        require(_amount <= usdt.balanceOf(address(this)), "Insufficient balance");
+
+        usdt.transfer(owner, _amount);
+        emit Withdrawn(owner, _amount);
+    }
+
+    // 转移合约所有权的函数，只有当前所有者可以调用
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "New owner is the zero address");
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+    }
+}
+
+// 定义ERC20代币接口
+interface IERC20 {
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}

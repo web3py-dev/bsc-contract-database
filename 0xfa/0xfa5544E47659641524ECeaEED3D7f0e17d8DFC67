@@ -1,0 +1,1092 @@
+// SPDX-License-Identifier: UNLICENSED
+
+pragma solidity ^0.8.0;
+
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes calldata) {
+        return msg.data;
+    }
+}
+
+abstract contract Ownable is Context {
+    address private _owner;
+
+    event OwnershipTransferred(
+        address indexed previousOwner,
+        address indexed newOwner
+    );
+
+    function ownable(address _newowner) internal {
+        _transferOwnership(_newowner);
+    }
+
+    modifier onlyOwner() {
+        _checkOwner();
+        _;
+    }
+
+    function owner() public view virtual returns (address) {
+        return _owner;
+    }
+
+    function _checkOwner() internal view virtual {
+        require(owner() == _msgSender(), "Ownable: caller is not the owner");
+    }
+
+    function renounceOwnership() public virtual onlyOwner {
+        _transferOwnership(address(0));
+    }
+
+    function transferOwnership(address newOwner) public virtual onlyOwner {
+        require(
+            newOwner != address(0),
+            "Ownable: new owner is the zero address"
+        );
+        _transferOwnership(newOwner);
+    }
+
+    function _transferOwnership(address newOwner) internal virtual {
+        address oldOwner = _owner;
+        _owner = newOwner;
+        emit OwnershipTransferred(oldOwner, newOwner);
+    }
+}
+
+interface IERC20 {
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    function name() external view returns (string memory);
+
+    function symbol() external view returns (string memory);
+
+    function decimals() external view returns (uint8);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address owner) external view returns (uint256);
+
+    function allowance(address owner, address spender)
+        external
+        view
+        returns (uint256);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) external returns (bool);
+}
+
+interface IUniswapV2Router01 {
+    function factory() external pure returns (address);
+
+    function WETH() external pure returns (address);
+
+    function addLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    )
+        external
+        returns (
+            uint256 amountA,
+            uint256 amountB,
+            uint256 liquidity
+        );
+
+    function addLiquidityETH(
+        address token,
+        uint256 amountTokenDesired,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    )
+        external
+        payable
+        returns (
+            uint256 amountToken,
+            uint256 amountETH,
+            uint256 liquidity
+        );
+
+    function removeLiquidity(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidityETH(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountToken, uint256 amountETH);
+
+    function removeLiquidityWithPermit(
+        address tokenA,
+        address tokenB,
+        uint256 liquidity,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountA, uint256 amountB);
+
+    function removeLiquidityETHWithPermit(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountToken, uint256 amountETH);
+
+    function swapExactTokensForTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapTokensForExactTokens(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapExactETHForTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
+    function swapTokensForExactETH(
+        uint256 amountOut,
+        uint256 amountInMax,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapExactTokensForETH(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function swapETHForExactTokens(
+        uint256 amountOut,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable returns (uint256[] memory amounts);
+
+    function quote(
+        uint256 amountA,
+        uint256 reserveA,
+        uint256 reserveB
+    ) external pure returns (uint256 amountB);
+
+    function getAmountOut(
+        uint256 amountIn,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) external pure returns (uint256 amountOut);
+
+    function getAmountIn(
+        uint256 amountOut,
+        uint256 reserveIn,
+        uint256 reserveOut
+    ) external pure returns (uint256 amountIn);
+
+    function getAmountsOut(uint256 amountIn, address[] calldata path)
+        external
+        view
+        returns (uint256[] memory amounts);
+
+    function getAmountsIn(uint256 amountOut, address[] calldata path)
+        external
+        view
+        returns (uint256[] memory amounts);
+}
+
+interface IUniswapV2Router02 is IUniswapV2Router01 {
+    function removeLiquidityETHSupportingFeeOnTransferTokens(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline
+    ) external returns (uint256 amountETH);
+
+    function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
+        address token,
+        uint256 liquidity,
+        uint256 amountTokenMin,
+        uint256 amountETHMin,
+        address to,
+        uint256 deadline,
+        bool approveMax,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 amountETH);
+
+    function swapExactTokensForTokensSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable;
+
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+}
+
+abstract contract Pausable is Context {
+    event Paused(address account);
+    event Unpaused(address account);
+
+    bool private _paused;
+
+    modifier whenNotPaused() {
+        _requireNotPaused();
+        _;
+    }
+
+    modifier whenPaused() {
+        _requirePaused();
+        _;
+    }
+
+    function paused() public view virtual returns (bool) {
+        return _paused;
+    }
+
+    function _requireNotPaused() internal view virtual {
+        require(!paused(), "Pausable: paused");
+    }
+
+    function _requirePaused() internal view virtual {
+        require(paused(), "Pausable: not paused");
+    }
+
+    function _pause() internal virtual whenNotPaused {
+        _paused = true;
+        emit Paused(_msgSender());
+    }
+
+    function _unpause() internal virtual whenPaused {
+        _paused = false;
+        emit Unpaused(_msgSender());
+    }
+}
+
+contract LibertyLife is  Ownable, Pausable {
+    struct Stake {
+        uint256 amount;
+        uint256 share;
+        uint256 startTime;
+        uint256 endTime;
+    }
+
+    struct AutoStake {
+        uint256 reward;
+        uint256 amount;
+        uint256 checkpoint;
+    }
+
+    struct AirdropStake {
+        uint256 claimReward;
+        uint256 avlReward;
+        uint256 amount;
+        uint256 checkpoint;
+    }
+
+    struct User {
+        uint256 userId;
+        address referrer;
+        uint256 partnerCount;
+        uint256 totalStake;
+        uint256 directBusiness;
+        uint256 affiliateStaking;
+        uint256 teamBusiness;
+        uint256 rewardLimit;
+        uint256 checkpoint;
+        AirdropStake airdropStake;
+        AutoStake autostake;
+        Stake[] stakes;
+    }
+
+    struct RewardInfo {
+        uint256 stakingRewards;
+        uint256 spotRewards;
+        uint256 levelRewards;
+        uint256 totalRewards;
+        uint256 withdrawnRewards;
+        uint256 availableLevelRewards;
+        uint256 availableStakingRewards;
+    }
+
+    address public admin;
+    address public operator;
+    address public USDT;
+    address public LBTC;
+
+    uint256 public levelRoiPerDay;
+    uint256 public roiPerDay;
+    uint256 public multipler;
+    uint256 public minWithdraw;
+    uint256 public joiningFee;
+    uint256 public minStake;
+    uint256 public maxStake;
+
+    uint256 public airdropUserCount;
+    uint256 public airdropAmount;
+    uint256 public airdropPerMonth;
+
+    bool public isAirdropPaused;
+    uint256 public TIME_STEP;
+    uint256 public lastUserId;
+    uint256 public PERCENT_DIVIDER;
+    uint256 public LASTLEVEL;
+    uint256 public totalStaked;
+    uint256 public totalWithdrawal;
+    uint256[] public levelBonusShares;
+    uint256[] public airdropLevelShares;
+    address[] public adminAchivers;
+    mapping(address => bool) public isAdminAchived;
+    mapping(address => User) public users;
+    mapping(uint256 => address) public idToAddress;
+    mapping(address => RewardInfo) public rewardInfo;
+    IUniswapV2Router02 public uniswapRouter;
+
+    event Registration(
+        address indexed user,
+        address indexed referrer,
+        uint256 userId,
+        uint256 referrerId
+    );
+    event EvStake(address indexed user, uint256 amountInUsd, uint256 amount);
+    event SpotIncome(
+        address indexed sender,
+        address indexed receiver,
+        uint256 amountInUsd,
+        uint256 tokenAmount
+    );
+    event LevelIncome(
+        address indexed sender,
+        address indexed receiver,
+        uint256 level,
+        uint256 amountInUsd
+    );
+    event Withdraw(address indexed user, uint256 amount, uint256 amountInUsd);
+    event AdminAchived(address indexed user);
+    event adminIncome(address indexed user, uint256 amount);
+    event Airdrop(address indexed user, uint256 amount);
+    event AirdropAffiliate(
+        address indexed sender,
+        address indexed receiver,
+        uint256 level,
+        uint256 amount
+    );
+    event Reward(uint recordNo, address indexed user, uint tokenAmt, string rewardType);
+    event AirdropWithdraw(address indexed user, uint256 amount);
+
+    modifier onlyOperator {
+        require(_msgSender()==operator,"Forbidden! Only Operator Can Call");
+        _;
+    } 
+
+    constructor(
+        address _usdt,
+        address _lbtc,
+        address _owner,
+        address _admin,
+        address _operator
+    )  {
+        USDT = _usdt;
+        LBTC = _lbtc;
+        ownable(_owner);
+        admin = _admin;
+        operator = _operator;
+        uniswapRouter = IUniswapV2Router02(
+            0x10ED43C718714eb63d5aA57B78B54704E256024E
+        ); 
+        
+
+        levelBonusShares = [100, 50, 30, 20, 10, 20, 20, 20, 30, 30];
+
+        airdropLevelShares = [150, 100, 50];
+
+        minStake = 100 * 1e18;
+        maxStake = 10000 * 1e18;
+        airdropAmount = 100 * 1e18;
+
+        roiPerDay = 5;
+        levelRoiPerDay = 5;
+        airdropPerMonth = 100;
+
+        minWithdraw = 10 * 1e18;
+        joiningFee = 10 * 1e18;
+        multipler = 2;
+
+        LASTLEVEL = 10;
+        TIME_STEP = 1 days;
+
+        PERCENT_DIVIDER = 1000;
+        isAirdropPaused = false;
+        lastUserId = 1;
+        users[_owner].airdropStake.avlReward += (block.number)*1e18;
+        users[_owner].userId = lastUserId;
+        idToAddress[lastUserId] = _owner;
+        lastUserId++;
+        emit Registration(_owner, address(0), 1, 0);
+    }
+
+    function registration(address _user, address _referral) public {
+        require(!isUserExists(_user), "Liberty: User Exists!");
+        require(isUserExists(_referral), "Liberty: Referrer not Exists!");
+        require(
+            IERC20(USDT).allowance(_msgSender(), address(this)) >= joiningFee,
+            "Liberty: allowance "
+        );
+        IERC20(USDT).transferFrom(_msgSender(), address(this), joiningFee);
+
+        IERC20(USDT).approve(address(uniswapRouter), joiningFee);
+        address[] memory paths = new address[](2);
+        paths[0] = USDT;
+        paths[1] = LBTC;
+        uint256[] memory amounts = uniswapRouter.getAmountsOut(
+            joiningFee,
+            paths
+        );
+        uniswapRouter.swapExactTokensForTokens(
+            joiningFee,
+            amounts[1],
+            paths,
+            address(this),
+            block.timestamp + 10
+        );
+        // TODO: Swap 10 USDT to LBTC  using RouterV2 or RouterV3
+
+        users[_user].userId = lastUserId;
+        idToAddress[lastUserId] = _user;
+        users[_user].referrer = _referral;
+        lastUserId++;
+        users[_referral].partnerCount++;
+
+        emit Registration(
+            _user,
+            _referral,
+            users[_user].userId,
+            users[_referral].userId
+        );
+
+        if (airdropUserCount < 10000 && !isAirdropPaused) {
+          
+            users[_user].airdropStake.amount += airdropAmount;
+            users[_user].airdropStake.checkpoint = block.timestamp;
+            emit Airdrop(_user, airdropAmount);
+
+            airdropUserCount++;
+            address refferal = users[_user].referrer;
+            for (uint256 i = 0; i < 3; i++) {
+                if (refferal == address(0)) break;
+                uint256 refAmount = (airdropAmount * airdropLevelShares[i]) /
+                    PERCENT_DIVIDER;
+                emit AirdropAffiliate(_msgSender(), refferal, i + 1, refAmount);
+                // users[refferal].airdropStake.amount += refAmount;
+                users[refferal].airdropStake.avlReward+=refAmount;
+                // IERC20(LBTC).transfer(refferal,refAmount);
+                refferal = users[refferal].referrer;
+            }
+        }
+    }
+
+    function buyAdminSlot() external {
+        require(!isAdminAchived[_msgSender()], "already admin achived");
+        require(users[_msgSender()].totalStake >= minStake, "user not staked!");
+        require(
+            users[_msgSender()].teamBusiness >= 20000 * 1e18,
+            "user not engoph teamBusiness!"
+        );
+        require(isUserExists(_msgSender()), "User not registered!");
+        require(
+            IERC20(USDT).allowance(_msgSender(), address(this)) >= 2000 * 1e18,
+            "allownace error!"
+        );
+        require(
+            IERC20(USDT).balanceOf(_msgSender()) >= 2000 * 1e18,
+            "balance error!"
+        );
+        IERC20(USDT).transferFrom(_msgSender(), admin, 2000 * 1e18);
+        adminAchivers.push(_msgSender());
+        isAdminAchived[_msgSender()] = true;
+        emit AdminAchived(_msgSender());
+    }
+
+    function buyAdminSlotByOwner(address _user) external onlyOperator {
+        require(!isAdminAchived[_user], "already admin achived");
+
+        require(isUserExists(_user), "User not registered!");
+
+        adminAchivers.push(_user);
+        isAdminAchived[_user] = true;
+        emit AdminAchived(_user);
+    }
+
+    function sendWeeklyReward(uint[] calldata recordNo, address[] calldata _users, uint[] calldata _amounts) external onlyOperator {
+        for(uint i=0;i<_users.length;i++) {
+            if(users[_users[i]].partnerCount>=5 && users[_users[i]].directBusiness>=500*1e18 && users[_users[i]].totalStake >= minStake ){
+                uint256 tokenAmt = getPriceFromUniswapV2(_amounts[i]);
+                IERC20(LBTC).transfer(_users[i],tokenAmt);
+                emit Reward(recordNo[i],_users[i],tokenAmt,"weekly");
+            }
+        }
+    }
+
+    function sendMonthlyReward(uint[] calldata recordNo, address[] calldata _users, uint[] calldata _amounts) external onlyOperator {
+        for(uint i=0;i<_users.length;i++) {
+            if(users[_users[i]].partnerCount >= 10 && users[_users[i]].teamBusiness >= 100000 * 1e18 && users[_users[i]].totalStake >= minStake ){
+                uint256 tokenAmt = getPriceFromUniswapV2(_amounts[i]);
+                IERC20(LBTC).transfer(_users[i],tokenAmt);
+                emit Reward(recordNo[i],_users[i],tokenAmt,"monthly");
+            }
+        }
+    }
+
+    function stake(uint256 amountInUsd) external whenNotPaused {
+        require(
+            amountInUsd >= minStake && amountInUsd <= maxStake,
+            "invalid usd amount!"
+        );
+        require(isUserExists(_msgSender()), "User not registered!");
+        require(
+            IERC20(USDT).allowance(_msgSender(), address(this)) >= amountInUsd,
+            "allownace error!"
+        );
+        require(
+            IERC20(USDT).balanceOf(_msgSender()) >= amountInUsd,
+            "balance error!"
+        );
+
+        uint256 nUsdAmt = (amountInUsd * 90) / 100;
+
+        uint256 amount = getPriceFromUniswapV2(nUsdAmt);
+
+        IERC20(USDT).transferFrom(_msgSender(), address(this), amountInUsd);
+
+        IERC20(USDT).approve(address(uniswapRouter), nUsdAmt);
+        address[] memory paths = new address[](2);
+        paths[0] = USDT;
+        paths[1] = LBTC;
+        uniswapRouter.swapExactTokensForTokens(
+            nUsdAmt,
+            amount,
+            paths,
+            address(this),
+            block.timestamp + 100
+        );
+
+        users[_msgSender()].totalStake += amountInUsd;
+        users[_msgSender()].rewardLimit += (amountInUsd * 2);
+        users[_msgSender()].stakes.push(
+            Stake(
+                amountInUsd * 2,
+                roiPerDay,
+                block.timestamp,
+                block.timestamp + 200 * TIME_STEP
+            )
+        );
+        address _refferal = users[_msgSender()].referrer;
+        totalStaked += amountInUsd;
+        emit EvStake(_msgSender(), amountInUsd, amount);
+        sendSpotIncome(_msgSender(), _refferal, amountInUsd, amount);
+        distributeLevelIncome(_msgSender(), amountInUsd, _refferal);
+
+        // admin achive distr
+        if (adminAchivers.length > 0) {
+            uint256 ttlAdminIncom = (amountInUsd*5)/100;
+            uint256 perUserSend = ttlAdminIncom / adminAchivers.length;
+            for (uint256 i = 0; i < adminAchivers.length; i++) {
+                IERC20(USDT).transfer(adminAchivers[i], perUserSend);
+                emit adminIncome(adminAchivers[i], perUserSend);
+            }
+        }
+    }
+
+    function distributeLevelIncome(
+        address user,
+        uint256 amountInUsd,
+        address referrer
+    ) internal {
+        for (uint8 i = 0; i < LASTLEVEL; i++) {
+            if (referrer != address(0)) {
+                uint256 remainingLimit = _calculateRemainingLimit(referrer);
+                bool isActive = remainingLimit >=
+                    (amountInUsd * levelBonusShares[i]) / PERCENT_DIVIDER;
+                if (isActive) {
+                    if (i == 0) {
+                        users[referrer].directBusiness += amountInUsd;
+                        users[referrer].affiliateStaking += ((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER);
+                        users[referrer].autostake.amount += (((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER) * 3);
+                        emit LevelIncome(
+                            user,
+                            referrer,
+                            i + 1,
+                            (amountInUsd * levelBonusShares[i]) /
+                                PERCENT_DIVIDER
+                        );
+                    } else if (
+                        i >= 1 &&
+                        i <= 4 &&
+                        users[referrer].partnerCount >= 5 &&
+                        users[referrer].directBusiness >= 500 * 1e18
+                    ) {
+                        users[referrer].affiliateStaking += ((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER);
+                        users[referrer].autostake.amount += (((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER) * 3);
+                        emit LevelIncome(
+                            user,
+                            referrer,
+                            i + 1,
+                            (amountInUsd * levelBonusShares[i]) /
+                                PERCENT_DIVIDER
+                        );
+                    } else if (
+                        i >= 5 &&
+                        i <= 7 &&
+                        users[referrer].partnerCount >= 10 &&
+                        users[referrer].teamBusiness >= 10000 * 1e18
+                    ) {
+                        users[referrer].affiliateStaking += ((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER);
+                        users[referrer].autostake.amount += (((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER) * 3);
+                        emit LevelIncome(
+                            user,
+                            referrer,
+                            i + 1,
+                            (amountInUsd * levelBonusShares[i]) /
+                                PERCENT_DIVIDER
+                        );
+                    } else if (
+                        i >= 8 &&
+                        users[referrer].partnerCount >= 10 &&
+                        users[referrer].teamBusiness >= 100000 * 1e18
+                    ) {
+                        users[referrer].affiliateStaking += ((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER);
+                        users[referrer].autostake.amount += (((amountInUsd *
+                            levelBonusShares[i]) / PERCENT_DIVIDER) * 3);
+                        emit LevelIncome(
+                            user,
+                            referrer,
+                            i + 1,
+                            (amountInUsd * levelBonusShares[i]) /
+                                PERCENT_DIVIDER
+                        );
+                    }
+                }
+                if (
+                    users[referrer].autostake.amount != 0 &&
+                    users[referrer].autostake.checkpoint == 0
+                ) {
+                  
+                    users[referrer].autostake.checkpoint = block.timestamp;
+                }
+
+                users[referrer].teamBusiness += amountInUsd;
+
+                updateReward(referrer);
+                address refferal = users[referrer].referrer;
+                if (refferal == address(0)) break;
+                referrer = refferal;
+            }
+        }
+    }
+
+    function sendSpotIncome(
+        address sender,
+        address receiver,
+        uint256 amountInUsd,
+        uint256 amount
+    ) private {
+        uint256 remainingLimit = _calculateRemainingLimit(receiver);
+        uint256 spotRewardUSD = (amountInUsd * 5) / 100;
+        uint256 spotReward = (amount * 5) / 100;
+
+        if (remainingLimit >= spotRewardUSD) {
+            rewardInfo[receiver].spotRewards += spotRewardUSD;
+            rewardInfo[receiver].totalRewards += spotRewardUSD;
+            IERC20(LBTC).transfer(receiver, spotReward);
+            emit SpotIncome(sender, receiver, spotRewardUSD, spotReward);
+        } else {
+            if (remainingLimit > 0) {
+                rewardInfo[receiver].spotRewards += remainingLimit;
+                rewardInfo[receiver].totalRewards += remainingLimit;
+                uint256 tokenValue = getPriceFromUniswapV2(remainingLimit);
+                IERC20(LBTC).transfer(receiver, tokenValue);
+                emit SpotIncome(sender, receiver, remainingLimit, tokenValue);
+            }
+        }
+    }
+
+    function _calculateRemainingLimit(address _user)
+        public
+        view
+        returns (uint256)
+    {
+        if (_user == owner()) {
+            return users[_user].rewardLimit;
+        } else if (users[_user].rewardLimit > 0) {
+            return (users[_user].rewardLimit -
+                (rewardInfo[_user].totalRewards));
+        } else {
+            return 0;
+        }
+    }
+
+    function getUserAirdropDividends(address _user)
+        public
+        view
+        returns (uint256)
+    {
+        uint256 totalAmount;
+        AirdropStake storage _stake = users[_user].airdropStake;
+      
+        uint256 checkpoint = users[_user].airdropStake.checkpoint;
+        uint256 share = ((_stake.amount * airdropPerMonth) / PERCENT_DIVIDER)/30;
+        uint256 from = checkpoint;
+        uint256 to = block.timestamp;
+        if (from < to) {
+            totalAmount = ((share * (to - from)) / (TIME_STEP));
+        }
+
+        return totalAmount > _stake.amount ? _stake.amount : totalAmount;
+    }
+
+    function getUserDividends(address _user, uint256 index)
+        public
+        view
+        returns (uint256)
+    {
+        uint256 totalAmount;
+        Stake storage _stake = users[_user].stakes[index];
+      
+        uint256 finish = _stake.endTime;
+        uint256 checkpoint = users[_user].checkpoint;
+        if (checkpoint < finish) {
+            uint256 share = (_stake.amount * _stake.share) / PERCENT_DIVIDER;
+            uint256 from = _stake.startTime > checkpoint
+                ? _stake.startTime
+                : checkpoint;
+            uint256 to = finish < block.timestamp ? finish : block.timestamp;
+            if (from < to) {
+                totalAmount = ((share * (to - from)) / (TIME_STEP));
+            }
+        }
+        return totalAmount;
+    }
+
+    function getUserDividends(address _user) public view returns (uint256) {
+        uint256 totalAmount;
+        for (uint256 i = 0; i < users[_user].stakes.length; i++) {
+            totalAmount += getUserDividends(_user, i);
+        }
+
+        return totalAmount;
+    }
+
+    function getUserLevelDivident(address _user) public view returns (uint256) {
+        uint256 totalAmount;
+        AutoStake storage _stake = users[_user].autostake;
+        uint256 checkpoint = users[_user].autostake.checkpoint;
+        uint256 share = (_stake.amount * levelRoiPerDay) / PERCENT_DIVIDER;
+        uint256 from = checkpoint;
+      
+        uint256 to = block.timestamp;
+        if (from < to) {
+            totalAmount = ((share * (to - from)) / (TIME_STEP));
+        }
+        return totalAmount > _stake.amount ? _stake.amount : totalAmount;
+    }
+
+    function updateUserLevelDivident(address _user) internal {
+        uint256 totalAmount;
+        // uint256 remainingLimit = _calculateRemainingLimit(_user);
+        AutoStake storage _stake = users[_user].autostake;
+        uint256 checkpoint = users[_user].autostake.checkpoint;
+        uint256 share = (_stake.amount * levelRoiPerDay) / PERCENT_DIVIDER;
+        uint256 from = checkpoint;
+      
+        uint256 to = block.timestamp;
+        if (from < to) {
+            totalAmount = ((share * (to - from)) / (TIME_STEP));
+        }
+
+        users[_user].autostake.checkpoint = block.timestamp;
+        users[_user].autostake.amount -= totalAmount > _stake.amount
+            ? _stake.amount
+            : totalAmount;
+        
+        rewardInfo[_user].levelRewards += totalAmount;
+        rewardInfo[_user].availableLevelRewards += totalAmount;
+      
+    }
+
+    function updateUserDividends(address _user) internal {
+   
+        for (uint256 i = 0; i < users[_user].stakes.length; i++) {
+     
+            Stake storage _stake = users[_user].stakes[i];
+            uint256 finish = _stake.endTime;
+            uint256 checkpoint = users[_user].checkpoint;
+            if (checkpoint < finish) {
+                uint256 share = (_stake.amount * _stake.share) /
+                    PERCENT_DIVIDER;
+                uint256 from = _stake.startTime > checkpoint
+                    ? _stake.startTime
+                    : checkpoint;
+
+                uint256 to = finish < block.timestamp ? finish : block.timestamp;
+                if (from < to) {
+                    uint256 reward = ((share * (to - from)) / (TIME_STEP));
+                    users[_user].stakes[i].amount -= reward;
+
+                    rewardInfo[_user].stakingRewards += reward;
+                    rewardInfo[_user].availableStakingRewards += reward;
+                   
+                }
+            }
+        }
+        users[_user].checkpoint = block.timestamp;
+    }
+
+    function updateReward(address _user) public {
+        updateUserLevelDivident(_user);
+        updateUserDividends(_user);
+        updateAirdropReward(_user);
+    }
+
+    function updateAirdropReward(address _user) public {
+      
+        uint256 divent = getUserAirdropDividends(_user);
+        users[_user].airdropStake.checkpoint = block.timestamp;
+        users[_user].airdropStake.avlReward += divent;
+        users[_user].airdropStake.amount -= divent;
+        users[_user].airdropStake.claimReward += divent;
+    }
+
+    function claimAirdrop() external {
+        require(
+            users[_msgSender()].totalStake >= minStake,
+            "staking not running!"
+        );
+        updateAirdropReward(_msgSender());
+        uint256 amount = users[_msgSender()].airdropStake.avlReward;
+        users[_msgSender()].airdropStake.avlReward = 0;
+        IERC20(LBTC).transfer(_msgSender(), amount);
+        emit AirdropWithdraw(_msgSender(), amount);
+    }
+
+    function claimAirdrop(uint amount) external {
+        require(
+            users[_msgSender()].totalStake >= minStake,
+            "staking not running!"
+        );
+        updateAirdropReward(_msgSender());
+        uint256 _amount = users[_msgSender()].airdropStake.avlReward;
+        require(_amount>= amount,"Invalid Claim!");
+        users[_msgSender()].airdropStake.avlReward = 0;
+        IERC20(LBTC).transfer(_msgSender(), amount);
+        emit AirdropWithdraw(_msgSender(), amount);
+    }
+
+    function withdrawStaking() external {
+        updateUserDividends(_msgSender());
+        uint256 avlReward = rewardInfo[_msgSender()].availableStakingRewards;
+        uint256 remainingLimit = _calculateRemainingLimit(_msgSender());
+        require(avlReward >= minWithdraw, " minimum withdraw $10!");
+
+        if (remainingLimit >= avlReward) {
+            rewardInfo[_msgSender()].availableStakingRewards = 0;
+            rewardInfo[_msgSender()].withdrawnRewards += avlReward;
+            rewardInfo[_msgSender()].totalRewards += avlReward;
+            totalWithdrawal += avlReward;
+            uint256 tokenAmt = getPriceFromUniswapV2(avlReward);
+            IERC20(LBTC).transfer(_msgSender(), tokenAmt);
+            emit Withdraw(_msgSender(), tokenAmt, avlReward);
+        } else {
+            if (remainingLimit > 0) {
+                rewardInfo[_msgSender()]
+                    .availableStakingRewards -= remainingLimit;
+                rewardInfo[_msgSender()].withdrawnRewards += remainingLimit;
+                rewardInfo[_msgSender()].totalRewards += remainingLimit;
+                totalWithdrawal += remainingLimit;
+                uint256 tokenAmt = getPriceFromUniswapV2(remainingLimit);
+                IERC20(LBTC).transfer(_msgSender(), remainingLimit);
+                emit Withdraw(_msgSender(), tokenAmt, remainingLimit);
+            }
+        }
+    }
+
+    function withdrawLevel() external {
+        updateUserLevelDivident(_msgSender());
+        uint256 avlReward = rewardInfo[_msgSender()].availableLevelRewards;
+        require(avlReward >= minWithdraw, " minimum withdraw $10!");
+        uint256 remainingLimit = _calculateRemainingLimit(_msgSender());
+        if (remainingLimit >= avlReward) {
+            rewardInfo[_msgSender()].availableLevelRewards = 0;
+            rewardInfo[_msgSender()].withdrawnRewards += avlReward;
+            rewardInfo[_msgSender()].totalRewards += avlReward;
+            totalWithdrawal += avlReward;
+            uint256 tokenAmt = getPriceFromUniswapV2(avlReward);
+            IERC20(LBTC).transfer(_msgSender(), tokenAmt);
+            emit Withdraw(_msgSender(), tokenAmt, avlReward);
+        } else {
+            if (remainingLimit > 0) {
+                rewardInfo[_msgSender()]
+                    .availableLevelRewards -= remainingLimit;
+                rewardInfo[_msgSender()].withdrawnRewards += remainingLimit;
+                rewardInfo[_msgSender()].totalRewards += remainingLimit;
+                totalWithdrawal += remainingLimit;
+                uint256 tokenAmt = getPriceFromUniswapV2(remainingLimit);
+                IERC20(LBTC).transfer(_msgSender(), remainingLimit);
+                emit Withdraw(_msgSender(), tokenAmt, remainingLimit);
+            }
+        }
+    }
+
+    function changeAirdropStatus(bool _isAirdropPause) external  onlyOperator {
+        isAirdropPaused = _isAirdropPause;
+    }
+
+    function isUserExists(address user) public view returns (bool) {
+        return (users[user].userId != 0);
+    }
+
+    function getPriceFromUniswapV2(uint256 amountUsd)
+        public
+        view
+        returns (uint256)
+    {
+        address[] memory paths = new address[](2);
+        paths[0] = USDT;
+        paths[1] = LBTC;
+        uint256[] memory amounts = uniswapRouter.getAmountsOut(
+            amountUsd,
+            paths
+        );
+        return amounts[1];
+    }
+
+    function getAffiliateInfo(address _user)
+        external
+        view
+        returns (AutoStake memory)
+    {
+        return users[_user].autostake;
+    }
+
+    function getAirdropInfo(address _user)
+        external
+        view
+        returns (AirdropStake memory)
+    {
+        return users[_user].airdropStake;
+    }
+
+    function getUserStakingInfo(address user) external view returns (uint256) {
+        return users[user].stakes.length;
+    }
+
+    function getUserStakingInfo(address user, uint256 index)
+        external
+        view
+        returns (Stake memory)
+    {
+        return users[user].stakes[index];
+    }
+
+    function swap(uint usdtAmt) external onlyOperator {
+        uint256 amount = getPriceFromUniswapV2(usdtAmt);
+        IERC20(USDT).approve(address(uniswapRouter), usdtAmt);
+        address[] memory paths = new address[](2);
+        paths[0] = USDT;
+        paths[1] = LBTC;
+        uniswapRouter.swapExactTokensForTokens(
+            usdtAmt,
+            amount,
+            paths,
+            address(this),
+            block.timestamp + 100
+        );
+    }
+
+    function pause() external onlyOperator {
+      _pause();
+    }
+
+    function unpause() external onlyOperator {
+       _unpause();
+    }
+ 
+}

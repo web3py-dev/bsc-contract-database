@@ -1,0 +1,206 @@
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity 0.8.6;
+
+interface IERC20  {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+contract Context {
+  constructor ()  { }
+
+  function _msgSender() internal view returns (address) {
+    return msg.sender;
+  }
+
+  function _msgData() internal view returns (bytes memory) {
+    this; // silence state mutability warning without generating bytecode - see https://github.com/ethereum/solidity/issues/2691
+    return msg.data;
+  }
+}
+
+library SafeMath {
+
+  function add(uint256 a, uint256 b) internal pure returns (uint256) {
+    uint256 c = a + b;
+    require(c >= a, "SafeMath: addition overflow");
+
+    return c;
+  }
+  function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+    return sub(a, b, "SafeMath: subtraction overflow");
+  }
+  function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+    require(b <= a, errorMessage);
+    uint256 c = a - b;
+
+    return c;
+  }
+  function mul(uint256 a, uint256 b) internal pure returns (uint256) {
+    if (a == 0) {
+      return 0;
+    }
+    uint256 c = a * b;
+    require(c / a == b, "SafeMath: multiplication overflow");
+    return c;
+  }
+  function div(uint256 a, uint256 b) internal pure returns (uint256) {
+    return div(a, b, "SafeMath: division by zero");
+  }
+  function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+    // Solidity only automatically asserts when dividing by 0
+    require(b > 0, errorMessage);
+    uint256 c = a / b;
+    // assert(a == b * c + a % b); // There is no case in which this doesn't hold
+    return c;
+  }
+  function mod(uint256 a, uint256 b) internal pure returns (uint256) {
+    return mod(a, b, "SafeMath: modulo by zero");
+  }
+  function mod(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
+    require(b != 0, errorMessage);
+    return a % b;
+  }
+}
+
+contract Ownable is Context {
+  address private _owner;
+
+  event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+  constructor () {
+    address msgSender = _msgSender();
+    _owner = msgSender;
+    emit OwnershipTransferred(address(0), msgSender);
+  }
+
+  function owner() public view returns (address) {
+    return _owner;
+  }
+
+  modifier onlyOwner() {
+    require(_owner == _msgSender(), "Ownable: caller is not the owner");
+    _;
+  }
+
+  function renounceOwnership() public onlyOwner {
+    emit OwnershipTransferred(_owner, address(0));
+    _owner = address(0);
+  }
+
+  function transferOwnership(address newOwner) public onlyOwner {
+    _transferOwnership(newOwner);
+  }
+
+  function _transferOwnership(address newOwner) internal {
+    require(newOwner != address(0), "Ownable: new owner is the zero address");
+    emit OwnershipTransferred(_owner, newOwner);
+    _owner = newOwner;
+  }
+}
+
+contract GODEREWARDS is  Ownable {
+    using SafeMath for uint256;
+
+    IERC20 pool ;
+
+    mapping(address => uint256) public booking1;
+    mapping(address => uint256) public booking2;
+    mapping(address => uint256) public booking3;
+    mapping(address => uint256) public expire1;
+    mapping(address => uint256) public expire2;
+    mapping(address => uint256) public expire3;
+
+    event Pledge(address user,uint8 onetwothree , uint256 lpamount);
+    event Withdraw(address user,uint8 onetwothree);
+
+    //bsc gode/usdt池
+    //主网0xDE5D1C531A829d8476AE620A47EdBbc79F6Cab2A
+    //测试网
+    //
+    constructor(address _pool)  {
+      pool = IERC20(_pool);
+    }
+    receive() external payable {}
+
+
+  function pledge(uint8 onetwothree , uint256 lpamount) public {
+    require(pool.balanceOf(msg.sender) >= lpamount,"LP token balance insufficent");
+    require(pool.allowance(msg.sender, address(this)) >= lpamount,"LP token not approved");
+    
+    if(onetwothree ==1 ){
+      require(booking1[msg.sender] ==0 ,"already booking 1");
+      pool.transferFrom(msg.sender,address(this),lpamount);
+      booking1[msg.sender] = lpamount;
+      expire1[msg.sender] = block.timestamp.add(86400*30);
+    }
+    if(onetwothree ==2 ){
+      require(booking2[msg.sender] ==0 ,"already booking 2");
+      pool.transferFrom(msg.sender,address(this),lpamount);
+      booking2[msg.sender] = lpamount;
+      expire2[msg.sender] = block.timestamp.add(86400*60);
+    }
+    if(onetwothree ==3 ){
+      require(booking3[msg.sender] ==0 ,"already booking 3");
+      pool.transferFrom(msg.sender,address(this),lpamount);
+      booking3[msg.sender] = lpamount;
+      expire3[msg.sender] = block.timestamp.add(86400*90);
+    }
+    emit Pledge( msg.sender, onetwothree ,  lpamount);
+  }
+
+  function withdraw(uint8 onetwothree) public {
+    if(onetwothree ==1){
+      require(expire1[msg.sender] != 0, "expire 1 not exist");
+      require(booking1[msg.sender] != 0, "booking 1 not exist");
+      require(expire1[msg.sender] < block.timestamp ,"booking 1 not expire");
+      pool.transfer(msg.sender,booking1[msg.sender]);
+      booking1[msg.sender] = 0;
+      expire1[msg.sender] = 0;
+    }
+    if(onetwothree ==2 ){
+      require(expire2[msg.sender] != 0, "expire 2 not exist");
+      require(booking2[msg.sender] != 0, "booking 2 not exist"); 
+      require(expire2[msg.sender] < block.timestamp ,"booking 2 not expire");
+      pool.transfer(msg.sender,booking2[msg.sender]);
+      booking2[msg.sender] = 0;
+      expire2[msg.sender] = 0;
+    }
+    if(onetwothree ==3 ){ 
+      require(expire3[msg.sender] != 0, "expire 3 not exist");
+      require(booking3[msg.sender] != 0, "booking 3 not exist");
+      require(expire3[msg.sender] < block.timestamp ,"booking 3 not expire");
+      pool.transfer(msg.sender,booking3[msg.sender]);
+      booking3[msg.sender] = 0;
+      expire3[msg.sender] = 0;
+    }
+    emit Withdraw( msg.sender,  onetwothree);
+  }
+
+  
+//质押数量
+  function getbooking1(address user)public view returns(uint256){
+    return booking1[user];
+  }
+  function getbooking2(address user)public view returns(uint256){
+    return booking2[user];
+  }
+  function getbooking3(address user)public view returns(uint256){
+    return booking3[user];
+  }
+  //查询过期
+  function getexpire1(address user)public view returns(uint256){
+    return expire1[user];
+  }
+  function getexpire2(address user)public view returns(uint256){
+    return expire2[user];
+  }
+  function getexpire3(address user)public view returns(uint256){
+    return expire3[user];
+  }
+}
